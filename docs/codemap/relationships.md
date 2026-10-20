@@ -20,10 +20,13 @@ App (FreeDisplayApp)
                     │           ├── ImageAdjustmentView      → GammaService
                     │           ├── MainDisplayView          → ArrangementService
                     │           ├── NotchView                → NotchOverlayManager
-                    │           └── HiDPIVirtualRowView      → VirtualDisplayService
+                    │           └── HiDPIRowView             → HiDPIService (plist override)
                     ├── ArrangementView          → ArrangementService
                     ├── VirtualDisplayView       → VirtualDisplayService
                     ├── AutoBrightnessView       → AutoBrightnessService → BrightnessService
+                    ├── LectureModeView          → SleepAssertionService (系统睡眠 assertion)
+                    ├── HeadlessSessionView      → HeadlessSessionService
+                    │                                → VirtualDisplayService / ArrangementService / SleepAssertionService
                     ├── SystemColorMenuEntry     → SystemColorView → SettingsService
                     └── SettingsView             → SettingsService, LaunchService
 ```
@@ -51,6 +54,14 @@ GammaService (gamma 所有者) ─→ 唯一写入 CGSetDisplayTransferByFormula
   ❌ 不得使用 CGDisplayRestoreColorSyncSettings()（全局），改用 GammaService.resetSingleDisplay(displayID)
 
 ResolutionService ──────────→ VirtualDisplayService.virtualDisplayID(for:) (镜像检测 fallback)
+
+HeadlessSessionService ─────→ VirtualDisplayService (创建/激活虚拟屏)
+                        ─────→ ArrangementService.setAsMainDisplay (单个事务平移布局)
+                        ─────→ SleepAssertionService (系统 + 显示器防睡眠)
+
+SleepAssertionService ──────→ IOPMAssertionCreateWithName (kernel 在进程退出时自动释放)
+  lecture owner       ─────→ 仅 PreventUserIdleSystemSleep
+  headlessSession owner ───→ PreventUserIdleSystemSleep + PreventUserIdleDisplaySleep
 ```
 
 ---
@@ -73,9 +84,11 @@ ResolutionService ──────────→ VirtualDisplayService.virtua
     → arrangeExternalAboveBuiltin()
     → @Published displays 更新 → 全局 View 重渲染
 
-虚拟显示器数据流（运行时，不持久化）：
-  VirtualDisplayView → VirtualDisplayService.enableHiDPIVirtual()
-    → CGVirtualDisplay(descriptor:) [主线程，vendorID=0xEEEE]
-    → MirrorService.enableMirror() [后台，CGHelpers.runWithTimeout]
-    → HiDPI 模式可用（重启后消失）
+虚拟显示器数据流：
+  VirtualDisplayView → VirtualDisplayService.create(config:)
+    → CGVirtualDisplay(descriptor:) [主线程，maxPixels = HiDPI ? 逻辑×2 : 逻辑]
+    → apply(settings) [后台，CGHelpers.runWithTimeout]
+    → 轮询 displayID + CGDisplayIsOnline（最多 5 秒）
+    → activeDisplayObjects 持有强引用；destroy = ARC 释放
+    → 无头会话：setAsMainDisplay → SleepAssertionService.acquire(.headlessSession)
 ```

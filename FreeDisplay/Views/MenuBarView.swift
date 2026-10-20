@@ -71,6 +71,8 @@ struct MenuBarView: View {
     @State private var showArrangement: Bool = false
     @State private var showVirtualDisplays: Bool = false
     @State private var showAutoBrightness: Bool = false
+    @State private var showLectureMode: Bool = false
+    @State private var showHeadlessSession: Bool = false
     @State private var showSettings: Bool = false
     @State private var quitHovered = false
 
@@ -181,6 +183,34 @@ struct MenuBarView: View {
 
                 if showAutoBrightness {
                     AutoBrightnessView()
+                        .padding(.leading, 8)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+
+                // 网课模式（个人分支）：只防止睡眠，不创建虚拟显示器
+                ExpandableRow(
+                    icon: "play.rectangle.fill",
+                    iconColor: .green,
+                    label: "网课模式",
+                    isExpanded: $showLectureMode
+                )
+
+                if showLectureMode {
+                    LectureModeView()
+                        .padding(.leading, 8)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+
+                // 无头会话（个人分支）：虚拟屏做主屏 + 防睡眠
+                ExpandableRow(
+                    icon: "moon.stars.fill",
+                    iconColor: .indigo,
+                    label: "无头会话",
+                    isExpanded: $showHeadlessSession
+                )
+
+                if showHeadlessSession {
+                    HeadlessSessionView()
                         .padding(.leading, 8)
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }

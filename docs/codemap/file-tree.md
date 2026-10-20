@@ -44,7 +44,7 @@ FreeDisplay/
 │   │   ├── DisplayMode.swift       # 单个显示模式（分辨率+刷新率+HiDPI 标志）的值类型；枚举逻辑改动影响分辨率切换和模式列表展示
 │   │   └── DisplayPreset.swift     # 显示器配置预设模型：DisplayPreset（预设）+ DisplayPresetEntry（单显示器快照）；Codable，由 PresetService 持久化
 │   ├── Services/                   # 业务逻辑层，与系统框架直接交互
-│   │   ├── ArrangementService.swift        # 通过 CGDisplayConfiguration 读写显示器位置，支持设为主显示器；setPosition/setAsMainDisplay 已异步化，CG 事务在 CGHelpers.runWithTimeout 内执行；改动影响拖拽排列和主显示器切换
+│   │   ├── ArrangementService.swift        # 通过 CGDisplayConfiguration 读写显示器位置；apply(origins:) 在单个事务中提交全部坐标，setAsMainDisplay 通过整体平移布局把目标移到 (0,0)（不再依赖缓存的 DisplayInfo 列表）；改动影响拖拽排列和主显示器切换
 │   │   ├── AutoBrightnessService.swift     # 读取 IOKit AppleLMUController 环境光传感器，定时轮询映射 lux→亮度；改动影响自动亮度精度和电池消耗
 │   │   ├── BrightnessService.swift         # 统一亮度接口：内建屏用 IODisplayGetFloatParameter，外接屏用 DDC VCP 0x10；改动影响所有亮度读写路径
 │   │   ├── CGHelpers.swift                 # 共享 CG 阻塞调用工具：CGHelpers.runWithTimeout(seconds:fallback:operation:) 在后台线程以超时保护运行 WindowServer IPC 阻塞操作；被 ArrangementService、MirrorService、ResolutionService、VirtualDisplayService 使用
@@ -52,14 +52,16 @@ FreeDisplay/
 │   │   ├── DDCService.swift                # ⚠️ IOKit I2C DDC/CI 通信核心：IOFramebuffer 查找、VCP 读写、5 秒 TTL 缓存、3 次重试；几乎所有外接显示器功能的底层依赖，改动需极谨慎
 │   │   ├── DisplayManager.swift            # ⚠️ 显示器枚举（CGGetOnlineDisplayList）+ CGDisplay 热插拔回调 + arrangeExternalAboveBuiltin() 自动外接屏定位；@Published displays 被全局注入，改动影响整个显示器列表数据流
 │   │   ├── GammaService.swift              # 软件 Gamma 调整：CGSetDisplayTransferByFormula/Table，支持对比度/增益/色温/量化/反色；所有 gamma/软件亮度写入的唯一入口；改动影响图像调整效果
+│   │   ├── HeadlessSessionService.swift    # 个人分支：无头会话。创建/激活虚拟显示器 → 设为主屏 → 持有防睡眠 assertion；监听显示器变化并在物理屏电源循环后重新确保虚拟屏为主屏；停止时恢复原主屏并销毁本次创建的虚拟屏
 │   │   ├── HiDPIService.swift              # 写 /Library/Displays/...plist 注入 HiDPI 缩放模式，需管理员权限；改动影响 HiDPI override 生成逻辑
 │   │   ├── LaunchService.swift             # SMAppService 管理开机自启动（macOS 13+）；改动仅影响 Launch at Login 功能
 │   │   ├── MirrorService.swift             # CGDisplayConfiguration 硬件级屏幕镜像的启用/停止；enableMirror/disableMirror 已异步化，CG 事务在 CGHelpers.runWithTimeout 内执行；改动影响镜像功能
 │   │   ├── NotchOverlayManager.swift       # 在内建屏刘海区域创建黑色遮罩 NSWindow（screenSaver 级别）；改动影响刘海遮罩的视觉效果和层级
 │   │   ├── ResolutionService.swift         # 通过 CGConfigureDisplayWithDisplayMode 切换显示模式；applyModeSync 已异步化，整个 CG 事务在 CGHelpers.runWithTimeout 内执行；resolvedTargetDisplayID() 在镜像检测时回退到 VirtualDisplayService；改动影响分辨率切换成功率
 │   │   ├── SettingsService.swift           # UserDefaults + JSON 文件持久化全局和每显示器设置；改动需注意 key 命名（必须 fd. 前缀）和向后兼容
+│   │   ├── SleepAssertionService.swift     # 个人分支：IOPM 防睡眠 assertion（等价 caffeinate -di），支持 lecture/headlessSession 两个 owner 引用计数；进程退出时内核自动释放，不会留下永久 assertion
 │   │   ├── UpdateService.swift             # GitHub Releases API 检查新版本，语义化版本比较；改动影响更新检查逻辑
-│   │   ├── VirtualDisplayService.swift     # 虚拟显示器创建/销毁：CGVirtualDisplay 私有 API（vendorID 必须非零如 0xEEEE，主线程创建），HiDPI via 镜像模式，CGHelpers.runWithTimeout 超时保护，hiDPILog 文件调试日志，ObjC 类型 Sendable 扩展；HiDPI 配置仅运行时生效不持久化；改动影响虚拟显示器和 HiDPI 一键预设功能
+│   │   ├── VirtualDisplayService.swift     # 虚拟显示器创建/销毁：CGVirtualDisplay 私有 API；width/height 是逻辑尺寸，HiDPI 时 maxPixels 为 2× backing；apply 后轮询 displayID/online；用 config UUID 派生稳定 product/serial；支持 activate/deactivate、wake 重建、autoCreate 去重；改动影响虚拟显示器和无头会话
 │   │   └── PresetService.swift             # 预设管理：保存/加载/应用显示器配置预设；使用 DisplayManagerAccessor 读取当前显示器状态；presets.json 存储在 ~/Library/Application Support/FreeDisplay/
 │   ├── Utilities/                  # 工具扩展
 │   │   └── NSScreenExtension.swift         # NSScreen 扩展：按 CGDirectDisplayID 查找 NSScreen，获取 displayID；被 NotchView、NotchOverlayManager 依赖
@@ -78,7 +80,9 @@ FreeDisplay/
 │       ├── ResolutionSliderView.swift      # 分辨率横向拖动滑块（松手生效）；依赖 ResolutionService，读取 DisplayInfo.availableModes
 │       ├── SystemColorView.swift           # 系统取色器（NSColorSampler）+ HEX/RGB/HSB 显示 + 历史记录；依赖 SettingsService 持久化颜色历史
 │       ├── HiDPIView.swift                 # HiDPI Override 状态行（plist 方案）+ 写入/还原按钮；依赖 HiDPIService
-│       ├── VirtualDisplayView.swift        # 虚拟显示器配置列表 + 创建表单（预设分辨率）+ HiDPI 一键预设；依赖 VirtualDisplayService
+│       ├── HeadlessSessionView.swift       # 个人分支：无头会话 UI（选择虚拟显示器 + 开始/结束 + 状态/错误）；依赖 HeadlessSessionService
+│       ├── LectureModeView.swift           # 个人分支：网课模式开关（仅防睡眠、不建虚拟屏，兼容 FairPlay/DRM）；依赖 SleepAssertionService
+│       ├── VirtualDisplayView.swift        # 虚拟显示器配置列表 + 创建表单（预设分辨率）+ HiDPI 一键预设 + 启用/停用按钮；依赖 VirtualDisplayService
 │       └── SavePresetView.swift            # 保存当前显示器状态为预设；内联表单（名称 + 图标选择器）；调用 PresetService.captureCurrentState + addPreset
 ├── FreeDisplay.xcodeproj/          # Xcode 项目文件（由 xcodegen 生成，不要手动编辑）
 ├── .gitignore                      # Git 忽略规则

@@ -44,8 +44,7 @@ struct ArrangementView: View {
                 Button(action: {
                     Task { @MainActor in
                         let ok = await ArrangementService.shared.setAsMainDisplay(
-                            display.displayID,
-                            among: displayManager.displays
+                            display.displayID
                         )
                         if ok { displayManager.refreshDisplays() }
                     }

@@ -48,24 +48,33 @@ class ArrangementService {
     /// Makes the target display the main display by translating the whole layout so
     /// the target lands at origin (0, 0). The relative arrangement of every other
     /// display is preserved, which avoids the overlap/jump caused by swapping origins.
+    ///
+    /// Online display IDs are read from CoreGraphics rather than a cached
+    /// `DisplayInfo` list: a virtual display can come online before DisplayManager's
+    /// next refresh, and a stale list would reject a valid target.
     /// - Returns: true if the configuration was applied successfully.
     @discardableResult
-    func setAsMainDisplay(_ targetID: CGDirectDisplayID, among displays: [DisplayInfo]) async -> Bool {
-        guard displays.contains(where: { $0.displayID == targetID }) else {
-            return false
-        }
+    func setAsMainDisplay(_ targetID: CGDirectDisplayID) async -> Bool {
+        guard CGDisplayIsOnline(targetID) != 0 else { return false }
         if CGDisplayIsMain(targetID) != 0 { return true }
 
         let targetBounds = CGDisplayBounds(targetID)
         let dx = -Int(targetBounds.origin.x)
         let dy = -Int(targetBounds.origin.y)
 
-        let origins: [(id: CGDirectDisplayID, x: Int32, y: Int32)] = displays
-            .filter { $0.isOnline }
-            .map { display in
-                let bounds = CGDisplayBounds(display.displayID)
+        var displayCount: UInt32 = 0
+        CGGetOnlineDisplayList(0, nil, &displayCount)
+        guard displayCount > 0 else { return false }
+
+        var displayIDs = [CGDirectDisplayID](repeating: 0, count: Int(displayCount))
+        CGGetOnlineDisplayList(displayCount, &displayIDs, &displayCount)
+
+        let origins: [(id: CGDirectDisplayID, x: Int32, y: Int32)] = displayIDs
+            .filter { CGDisplayIsOnline($0) != 0 }
+            .map { id in
+                let bounds = CGDisplayBounds(id)
                 return (
-                    id: display.displayID,
+                    id: id,
                     x: Int32(bounds.origin.x) + Int32(dx),
                     y: Int32(bounds.origin.y) + Int32(dy)
                 )

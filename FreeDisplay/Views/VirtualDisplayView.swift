@@ -5,6 +5,7 @@ import CoreGraphics
 /// Lists all saved virtual display configurations and allows creating / deleting them.
 struct VirtualDisplayView: View {
     @StateObject private var service = VirtualDisplayService.shared
+    @ObservedObject private var session = HeadlessSessionService.shared
     @State private var showCreateForm = false
     @State private var configToDelete: UUID?
     @State private var isCreating: Bool = false
@@ -99,6 +100,7 @@ struct VirtualDisplayView: View {
     private func configRow(config: VirtualDisplayService.VirtualDisplayConfig) -> some View {
         let active = service.isActive(config.id)
         let online = service.isOnline(config.id)
+        let sessionOwned = session.isRunning && session.activeConfigID == config.id
 
         HStack(spacing: 8) {
             Image(systemName: "display.2")
@@ -135,6 +137,16 @@ struct VirtualDisplayView: View {
                     .cornerRadius(4)
             }
 
+            if sessionOwned {
+                Text("无头会话")
+                    .font(.caption2)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(Color.indigo)
+                    .cornerRadius(4)
+            }
+
             Button {
                 Task { @MainActor in
                     if service.isOnline(config.id) {
@@ -148,7 +160,10 @@ struct VirtualDisplayView: View {
                     .font(.caption)
             }
             .buttonStyle(.borderless)
-            .help(online ? "停用此虚拟显示器（保留配置）" : "启用此虚拟显示器")
+            .disabled(sessionOwned)
+            .help(sessionOwned
+                  ? "无头会话运行中，无法停用"
+                  : (online ? "停用此虚拟显示器（保留配置）" : "启用此虚拟显示器"))
 
             // Delete button
             Button(action: {
@@ -159,7 +174,8 @@ struct VirtualDisplayView: View {
                     .foregroundColor(.red)
             }
             .buttonStyle(.plain)
-            .help("删除此虚拟显示器配置")
+            .disabled(sessionOwned)
+            .help(sessionOwned ? "无头会话运行中，无法删除" : "删除此虚拟显示器配置")
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
@@ -173,6 +189,7 @@ struct VirtualDisplayView: View {
             } label: {
                 Label("删除", systemImage: "trash")
             }
+            .disabled(sessionOwned)
         }
     }
 }

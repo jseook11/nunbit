@@ -237,7 +237,7 @@ class DisplayManager: ObservableObject {
     /// Makes the target display the main display by repositioning it to origin (0, 0).
     func setAsMainDisplay(_ display: DisplayInfo) {
         Task { @MainActor in
-            let ok = await ArrangementService.shared.setAsMainDisplay(display.displayID, among: self.displays)
+            let ok = await ArrangementService.shared.setAsMainDisplay(display.displayID)
             if ok { self.refreshDisplays() }
         }
     }

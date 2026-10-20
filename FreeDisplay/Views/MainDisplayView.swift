@@ -4,7 +4,6 @@ import SwiftUI
 /// Shows a status row when this display is already main, or a tappable button otherwise.
 struct MainDisplayView: View {
     @ObservedObject var display: DisplayInfo
-    @EnvironmentObject var displayManager: DisplayManager
     @State private var errorMessage: String?
     @State private var isHovered = false
 
@@ -34,8 +33,7 @@ struct MainDisplayView: View {
                 .onTapGesture {
                     Task { @MainActor in
                         let success = await ArrangementService.shared.setAsMainDisplay(
-                            display.displayID,
-                            among: displayManager.displays
+                            display.displayID
                         )
                         if !success {
                             errorMessage = "设置主显示屏失败"
