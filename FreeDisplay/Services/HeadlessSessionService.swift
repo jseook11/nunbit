@@ -74,11 +74,21 @@ final class HeadlessSessionService: ObservableObject {
         activeConfigID = configID
 
         guard await ArrangementService.shared.setAsMainDisplay(virtualID) else {
-            await rollbackStart(configID: configID)
-            errorMessage = "无法把虚拟显示器设为主屏"
-            return false
+            // WindowServer can briefly reject a transaction right after a display
+            // appears; one retry is enough to ride out the transition.
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            guard await ArrangementService.shared.setAsMainDisplay(virtualID) else {
+                await rollbackStart(configID: configID)
+                errorMessage = "无法把虚拟显示器设为主屏"
+                return false
+            }
+            return await finishStart(configID: configID)
         }
 
+        return await finishStart(configID: configID)
+    }
+
+    private func finishStart(configID: UUID) async -> Bool {
         guard SleepAssertionService.shared.acquire(
             .headlessSession,
             reason: "FreeDisplay headless session"
