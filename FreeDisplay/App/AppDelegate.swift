@@ -1,7 +1,7 @@
 import AppKit
 import CoreGraphics
 
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, @unchecked Sendable {
     private var wakeObserver: NSObjectProtocol?
     private var screensWakeObserver: NSObjectProtocol?
 
@@ -27,9 +27,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.onWake?()
-            }
+            self?.onWake?()
             Task { @MainActor in
                 // WindowServer can drop virtual displays across a system wake.
                 await VirtualDisplayService.shared.reconcileActiveDisplays()

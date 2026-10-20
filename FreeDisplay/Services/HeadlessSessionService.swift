@@ -54,6 +54,11 @@ final class HeadlessSessionService: ObservableObject {
             return false
         }
 
+        // Capture this before creating the virtual display: on a headless Mac the
+        // newly created display could otherwise become main and be recorded as
+        // the display we should restore.
+        let previousMain = CGMainDisplayID()
+
         let wasOnline = virtualDisplays.isOnline(configID)
         if !wasOnline {
             guard await virtualDisplays.create(config: config) else {
@@ -69,7 +74,7 @@ final class HeadlessSessionService: ObservableObject {
             return false
         }
 
-        previousMainDisplayID = CGMainDisplayID()
+        previousMainDisplayID = previousMain
         createdDisplayForSession = !wasOnline
         activeConfigID = configID
 

@@ -70,18 +70,21 @@ Upstream에 PR로 보낼 목적이 아니라, 이 Mac에서 두 가지 상황을
 
 ## 검증 상태
 
-Command Line Tools만 있는 환경에서 가능한 범위까지 검증했다.
+Xcode 27.1 / macOS 26.7.1에서 Debug 빌드까지 완료했다.
 
-- 서비스/모델 레이어: `swiftc -typecheck` 통과 (기존 경고만 존재).
-- SwiftUI 뷰: `swiftc -parse` 통과 (CLT에는 `SwiftUIMacros` 플러그인이 없어 typecheck 불가).
+- `xcodebuild -project FreeDisplay.xcodeproj -scheme FreeDisplay -configuration Debug -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO build` → **BUILD SUCCEEDED**
+- 서비스/모델 레이어: `swiftc -typecheck` 통과.
+- SwiftUI 뷰: Xcode 빌드 통과. 추가로 `NSHostingView` 오프스크린 캡처로 메뉴 패널과 새 뷰 레이아웃 확인.
+  - 메뉴 패널이 빈 화면이 아니라 디스플레이 목록/프리셋/도구/설정/푸터까지 정상 렌더링됨.
+  - `网课模式`, `无头会话` 행과 내부 컨트롤이 정상 배치됨.
 - 실제 하드웨어 스모크 테스트 통과:
   - 1920×1080 논리 / 3840×2160 backing HiDPI 가상 디스플레이 생성.
   - vendor `0xEEEE`, stable model/serial, online 확인.
   - 가상 디스플레이를 메인으로 전환 → 물리 디스플레이가 `(1280,0)`으로 이동.
   - 종료 시 물리 디스플레이 `(0,0)` 메인 복원, 가상 디스플레이 제거.
+  - 실제 앱을 실행하고 `autoCreate` config를 넣어 앱 프로세스가 가상 디스플레이를 생성/정리하는 것까지 확인.
   - `SleepAssertionService` owner 참조 카운트: lecture(system) + headless(system+display) → headless 해제 후 system 유지 → 전체 해제 시 0.
-- **미검증**: 전체 앱 `xcodebuild` 빌드, 실제 메뉴 패널 레이아웃, 모니터 전원 차단 상태에서의 게임/강의 지속 여부.
-  - 이 Mac에 Xcode가 설치되지 않아 `xcodebuild`를 실행할 수 없다.
+- **미검증**: 물리 모니터 전원을 실제로 끈 상태에서 게임/강의가 계속되는지. 이건 사용자가 한 번 테스트해야 한다.
 
 ## 빌드
 
