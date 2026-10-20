@@ -32,7 +32,7 @@ struct HeadlessSessionView: View {
                         .frame(width: 64, alignment: .leading)
                     Picker("", selection: $selectedConfigID) {
                         ForEach(virtualDisplays.configs) { config in
-                            Text("\(config.name) · \(config.width)×\(config.height)")
+                            Text(verbatim: "\(config.name) · \(config.width)×\(config.height)")
                                 .tag(config.id.uuidString)
                         }
                     }
@@ -94,13 +94,13 @@ struct HeadlessSessionView: View {
                         .foregroundColor(.red)
                 }
 
-                Text("开始前请先把游戏窗口拖到该虚拟显示器上。启动后会把虚拟显示器设为主屏，并阻止系统与显示器睡眠。请手动按物理显示器的电源键关屏；游戏窗口留在虚拟屏上继续运行。结束会话会恢复原主屏，并关闭本次创建的虚拟显示器。")
+                Text("开始会话会创建并启用所选虚拟显示器，并把它设为主屏。然后把游戏窗口拖到这块新显示的屏幕上，再按物理显示器的电源键关屏。会话期间系统与显示器不会休眠；结束时恢复原主屏，并关闭本次创建的虚拟显示器。")
                     .font(.caption2)
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
                 if let config = selectedConfig {
-                    Text("\(config.name) · \(config.width)×\(config.height)\(config.hiDPI ? " HiDPI" : "") · \(Int(config.refreshRate))Hz")
+                    Text(verbatim: "\(config.name) · \(config.width)×\(config.height)\(config.hiDPI ? " HiDPI" : "") · \(Int(config.refreshRate))Hz")
                         .font(.caption2)
                         .foregroundColor(.secondary)
                         .lineLimit(1)
