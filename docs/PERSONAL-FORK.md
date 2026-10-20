@@ -88,6 +88,14 @@ Xcode 27.1 / macOS 26.7.1에서 Debug 빌드까지 완료했다.
   - `SleepAssertionService` owner 참조 카운트: lecture(system) + headless(system+display) → headless 해제 후 system 유지 → 전체 해제 시 0.
 - **미검증**: 물리 모니터 전원을 실제로 끈 상태에서 게임/강의가 계속되는지. 이건 사용자가 한 번 테스트해야 한다.
 
+## 현재 설치
+
+- 빌드: Release, ad-hoc 서명
+- 설치 위치: `~/Applications/FreeDisplay.app`
+- 기본 가상 디스플레이 설정: `1920×1080` / HiDPI / 60Hz / autoCreate 꺼짐
+- `无头会话`의 선택값도 위 설정으로 미리 지정해 둠
+- 메뉴 UI는 upstream의 중국어를 그대로 사용한다. 새 기능은 **网课模式**(강의 모드), **无头会话**(헤드리스 세션)이다.
+
 ## 빌드
 
 ```bash
