@@ -20,6 +20,8 @@ final class HeadlessSessionService: ObservableObject {
 
     /// Main display before the session started, so Stop can restore it.
     private var previousMainDisplayID: CGDirectDisplayID?
+    /// True once the pre-session main display has gone offline (monitor powered off).
+    private var physicalWasOffline = false
     /// True when this session created the virtual display (vs. reusing an active one).
     private var createdDisplayForSession = false
 
@@ -75,6 +77,7 @@ final class HeadlessSessionService: ObservableObject {
         }
 
         previousMainDisplayID = previousMain
+        physicalWasOffline = false
         createdDisplayForSession = !wasOnline
         activeConfigID = configID
 
@@ -128,6 +131,7 @@ final class HeadlessSessionService: ObservableObject {
         isRunning = false
         activeConfigID = nil
         previousMainDisplayID = nil
+        physicalWasOffline = false
         createdDisplayForSession = false
         errorMessage = nil
     }
@@ -141,6 +145,7 @@ final class HeadlessSessionService: ObservableObject {
         isRunning = false
         activeConfigID = nil
         previousMainDisplayID = nil
+        physicalWasOffline = false
         createdDisplayForSession = false
     }
 
@@ -166,6 +171,19 @@ final class HeadlessSessionService: ObservableObject {
 
     private func ensureVirtualDisplayIsMain() async {
         guard isRunning, let configID = activeConfigID else { return }
+
+        // When the physical monitor comes back after being switched off, restore it
+        // as the main display. The session and the game keep running on the virtual
+        // display, but the user can reach the menu bar again to stop the session.
+        if let previous = previousMainDisplayID {
+            if CGDisplayIsOnline(previous) == 0 {
+                physicalWasOffline = true
+            } else if physicalWasOffline {
+                physicalWasOffline = false
+                _ = await ArrangementService.shared.setAsMainDisplay(previous)
+                return
+            }
+        }
 
         let virtualDisplays = VirtualDisplayService.shared
         if !virtualDisplays.isOnline(configID) {
