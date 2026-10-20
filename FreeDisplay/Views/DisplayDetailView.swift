@@ -24,16 +24,24 @@ struct DisplayDetailView: View {
         UserDefaults.standard.set(value, forKey: sectionKey(name))
     }
 
+    /// Virtual displays control HiDPI through CGVirtualDisplaySettings. The plist
+    /// override path is meaningless for them and can trigger an admin prompt.
+    private var isVirtual: Bool {
+        VirtualDisplayService.shared.isVirtualDisplay(display.displayID)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
 
             // Brightness slider
             BrightnessSliderView(display: display)
 
-            Divider().opacity(0.3).padding(.vertical, 2)
+            if !isVirtual {
+                Divider().opacity(0.3).padding(.vertical, 2)
 
-            // HiDPI toggle — before mode list (natural workflow: enable HiDPI → pick resolution)
-            HiDPIRowView(display: display)
+                // HiDPI toggle — before mode list (natural workflow: enable HiDPI → pick resolution)
+                HiDPIRowView(display: display)
+            }
 
             // Display mode list toggle row
             ExpandableRow(

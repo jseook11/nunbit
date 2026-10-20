@@ -3,6 +3,7 @@ import CoreGraphics
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var wakeObserver: NSObjectProtocol?
+    private var screensWakeObserver: NSObjectProtocol?
 
     /// Called by FreeDisplayApp to provide access to the live DisplayManager instance.
     var onWake: (() -> Void)?
@@ -26,12 +27,31 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.onWake?()
+            MainActor.assumeIsolated {
+                self?.onWake?()
+            }
+            Task { @MainActor in
+                // WindowServer can drop virtual displays across a system wake.
+                await VirtualDisplayService.shared.reconcileActiveDisplays()
+            }
+        }
+
+        screensWakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.screensDidWakeNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            Task { @MainActor in
+                await VirtualDisplayService.shared.reconcileActiveDisplays()
+            }
         }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         if let obs = wakeObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(obs)
+        }
+        if let obs = screensWakeObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(obs)
         }
         BrightnessKeyService.shared.stop()

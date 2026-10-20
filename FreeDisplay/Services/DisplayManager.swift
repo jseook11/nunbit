@@ -26,8 +26,13 @@ private func displayReconfigCallback(
             manager.refreshDisplays()
         }
 
-        // Auto-rearrange after any display config change completes (debounced 500 ms).
-        manager.scheduleAutoArrange()
+        // Auto-rearrange only after structural changes (add/remove/mode).
+        // Do NOT arrange on .setMainFlag: that would immediately undo a user's
+        // "set as main" action and can create a callback feedback loop.
+        let shouldArrange = !flags.intersection([.addFlag, .removeFlag, .setModeFlag]).isEmpty
+        if shouldArrange {
+            manager.scheduleAutoArrange()
+        }
     }
 }
 
@@ -40,6 +45,8 @@ class DisplayManager: ObservableObject {
 
     /// Work item used to debounce auto-arrange calls triggered by display config changes.
     private var autoArrangeWorkItem: DispatchWorkItem?
+    /// Ensures the optional initial arrangement runs at most once per app launch.
+    private var didScheduleInitialArrange = false
 
     init() {
         refreshDisplays()
@@ -70,7 +77,7 @@ class DisplayManager: ObservableObject {
         }
 
         // Diff-based refresh: keep existing DisplayInfo objects (preserves @Published state)
-        var existingByID = Dictionary(uniqueKeysWithValues: displays.map { ($0.displayID, $0) })
+        let existingByID = Dictionary(uniqueKeysWithValues: displays.map { ($0.displayID, $0) })
 
         var updatedDisplays: [DisplayInfo] = []
         var addedDisplays: [DisplayInfo] = []
@@ -123,6 +130,10 @@ class DisplayManager: ObservableObject {
     /// Auto-enables HiDPI plist override for external 2K+ displays that don't have it yet.
     /// This ensures switching between different monitors "just works" without manual re-enable.
     private func autoEnableHiDPIIfNeeded(for display: DisplayInfo) async {
+        // Virtual displays already control their own HiDPI mode; writing a plist
+        // override for vendor 0xEEEE is useless and can trigger an admin prompt.
+        guard !VirtualDisplayService.shared.isVirtualDisplay(display.displayID) else { return }
+
         let vendor = display.vendorNumber
         let product = display.modelNumber
         guard vendor != 0, product != 0 else { return }
@@ -158,9 +169,24 @@ class DisplayManager: ObservableObject {
         }
     }
 
+    /// Runs the optional "external displays above the built-in display" arrangement
+    /// exactly once per launch. MenuBarExtra content is recreated whenever the panel
+    /// opens, so this must never be called unguarded from a view `.task`.
+    func scheduleInitialArrangeOnce() {
+        guard !didScheduleInitialArrange else { return }
+        didScheduleInitialArrange = true
+        guard UserDefaults.standard.bool(forKey: "fd.arrangement.externalAbove") else { return }
+        Task { @MainActor in
+            // Give WindowServer time to finish enumerating displays after launch.
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            self.arrangeExternalAboveBuiltin()
+        }
+    }
+
     /// Debounces calls to `arrangeExternalAboveBuiltin()` — coalesces bursts of config-change
     /// callbacks into a single rearrange that fires 500 ms after the last callback arrives.
     func scheduleAutoArrange() {
+        guard UserDefaults.standard.bool(forKey: "fd.arrangement.externalAbove") else { return }
         autoArrangeWorkItem?.cancel()
         let item = DispatchWorkItem { [weak self] in
             self?.arrangeExternalAboveBuiltin()
@@ -180,6 +206,13 @@ class DisplayManager: ObservableObject {
     /// Cheaper than a full `refreshDisplays()` — does not add/remove DisplayInfo objects.
     func refreshExistingDisplayModes() {
         for display in displays {
+            // Always refresh geometry synchronously — it is cheap and stale bounds
+            // make the optional auto-arranger compute wrong targets.
+            display.bounds = CGDisplayBounds(display.displayID)
+            display.pixelWidth = CGDisplayPixelsWide(display.displayID)
+            display.pixelHeight = CGDisplayPixelsHigh(display.displayID)
+            display.isOnline = CGDisplayIsOnline(display.displayID) != 0
+            display.isEnabled = CGDisplayIsActive(display.displayID) != 0
             // Always refresh isMain synchronously since it's cheap and needed for setMainFlag events.
             display.isMain = CGDisplayIsMain(display.displayID) != 0
             Task {
@@ -209,29 +242,52 @@ class DisplayManager: ObservableObject {
         }
     }
 
-    /// Positions all external displays above the built-in display, centered horizontally.
-    /// Controlled by the UserDefaults key `fd.arrangement.externalAbove`.
-    /// Does nothing if there is no built-in display or no external displays.
+    /// Positions all external displays above the built-in display, packed left-to-right
+    /// and centered as a group. Controlled by `fd.arrangement.externalAbove` (default off).
+    /// Virtual displays are excluded: they are managed by VirtualDisplayService and must
+    /// never be treated as physical monitors by the auto-arranger.
     func arrangeExternalAboveBuiltin() {
         guard UserDefaults.standard.bool(forKey: "fd.arrangement.externalAbove") else { return }
-
         guard let builtin = displays.first(where: { $0.isBuiltin }) else { return }
-        let externals = displays.filter { !$0.isBuiltin }
+
+        let externals = displays.filter {
+            !$0.isBuiltin &&
+            $0.isOnline &&
+            !VirtualDisplayService.shared.isVirtualDisplay($0.displayID)
+        }
         guard !externals.isEmpty else { return }
 
-        let builtinX = Int(builtin.bounds.origin.x)
-        let builtinY = Int(builtin.bounds.origin.y)
-        let builtinWidth = Int(builtin.bounds.width)
+        let builtinBounds = CGDisplayBounds(builtin.displayID)
+        let builtinX = Int(builtinBounds.origin.x)
+        let builtinY = Int(builtinBounds.origin.y)
+        let builtinWidth = Int(builtinBounds.width)
 
-        let arrangeItems = externals.map { ext in
-            let extWidth = Int(ext.bounds.width)
-            let centeredX = builtinX + (builtinWidth - extWidth) / 2
-            return (id: ext.displayID, x: centeredX, y: builtinY - Int(ext.bounds.height))
+        let totalWidth = externals.reduce(0) {
+            $0 + Int(CGDisplayBounds($1.displayID).width)
         }
+        var cursorX = builtinX + (builtinWidth - totalWidth) / 2
+
+        var arrangeItems: [(id: CGDirectDisplayID, x: Int32, y: Int32)] = []
+        for ext in externals {
+            let bounds = CGDisplayBounds(ext.displayID)
+            arrangeItems.append((
+                id: ext.displayID,
+                x: Int32(cursorX),
+                y: Int32(builtinY - Int(bounds.height))
+            ))
+            cursorX += Int(bounds.width)
+        }
+
+        // Idempotence: do not write a configuration that is already in effect.
+        let needsMove = arrangeItems.contains { item in
+            let bounds = CGDisplayBounds(item.id)
+            return abs(Int(bounds.origin.x) - Int(item.x)) > 1 ||
+                   abs(Int(bounds.origin.y) - Int(item.y)) > 1
+        }
+        guard needsMove else { return }
+
         Task { @MainActor in
-            for item in arrangeItems {
-                await ArrangementService.shared.setPosition(x: item.x, y: item.y, for: item.id)
-            }
+            _ = await ArrangementService.shared.apply(origins: arrangeItems)
             self.refreshDisplays()
         }
     }

@@ -90,6 +90,12 @@ final class PresetService: ObservableObject, @unchecked Sendable {
                 print("[PresetService]   -> built-in display, skipping")
                 continue
             }
+            // Virtual displays are managed by VirtualDisplayService; presets must not
+            // change their mode, gamma, brightness or arrangement.
+            guard !VirtualDisplayService.shared.isVirtualDisplay(display.displayID) else {
+                print("[PresetService]   -> virtual display, skipping")
+                continue
+            }
 
             let displayID = display.displayID
             print("[PresetService]   -> matched display '\(display.name)' (id=\(displayID)), \(display.availableModes.count) available modes")
@@ -154,6 +160,7 @@ final class PresetService: ObservableObject, @unchecked Sendable {
         let displays = DisplayManagerAccessor.shared.displays
         let entries: [DisplayPresetEntry] = displays.compactMap { display in
             guard display.isOnline, !display.isBuiltin else { return nil }
+            guard !VirtualDisplayService.shared.isVirtualDisplay(display.displayID) else { return nil }
             let mode = display.currentDisplayMode
             return DisplayPresetEntry(
                 displayUUID: display.displayUUID,
@@ -195,7 +202,11 @@ final class PresetService: ObservableObject, @unchecked Sendable {
 
     private func makeBuiltinPresets() -> [DisplayPreset] {
         // Presets only manage external displays — never touch the built-in screen
-        let externals = DisplayManagerAccessor.shared.displays.filter { $0.isOnline && !$0.isBuiltin }
+        let externals = DisplayManagerAccessor.shared.displays.filter {
+            $0.isOnline &&
+            !$0.isBuiltin &&
+            !VirtualDisplayService.shared.isVirtualDisplay($0.displayID)
+        }
         guard !externals.isEmpty else { return [] }
 
         // --- 原生模式 ---

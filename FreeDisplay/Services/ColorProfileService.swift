@@ -60,6 +60,10 @@ final class ColorProfileService: @unchecked Sendable {
                     guard !seenPaths.contains(url) else { continue }
                     let ext = url.pathExtension.lowercased()
                     guard ext == "icc" || ext == "icm" else { continue }
+                    // Only monitor-class, RGB profiles are safe to feed to
+                    // ColorSyncDeviceSetCustomProfiles. CMYK/printer/abstract profiles
+                    // can abort inside SkyLight/WindowServer.
+                    guard Self.isDisplayRGBProfile(at: url) else { continue }
                     seenPaths.insert(url)
                     if let profile = Self.makeProfileImpl(from: url) {
                         profiles.append(profile)
@@ -95,6 +99,24 @@ final class ColorProfileService: @unchecked Sendable {
         }
 
         return ICCProfile(name: name, path: url, colorSpaceType: csType)
+    }
+
+    /// Validates the ICC header before a profile is listed or applied.
+    /// Only monitor-class (`mntr`) profiles with an RGB data color space are safe for
+    /// `ColorSyncDeviceSetCustomProfiles`; printer/CMYK/abstract profiles can abort
+    /// inside SkyLight/WindowServer.
+    static func isDisplayRGBProfile(at url: URL) -> Bool {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return false }
+        defer { try? handle.close() }
+        guard let header = try? handle.read(upToCount: 128), header.count >= 128 else {
+            return false
+        }
+        // ICC header: device class at bytes 12..<16, data color space at 16..<20.
+        guard let deviceClass = String(data: header[12..<16], encoding: .ascii),
+              let colorSpace = String(data: header[16..<20], encoding: .ascii) else {
+            return false
+        }
+        return deviceClass == "mntr" && colorSpace == "RGB "
     }
 
     private static func colorSpaceType(from profile: ColorSyncProfile) -> String {
@@ -189,7 +211,7 @@ final class ColorProfileService: @unchecked Sendable {
         if let modeName = activeModeName,
            let modeDict = factoryProfiles?[modeName] as? NSDictionary,
            let urlString = modeDict["DeviceProfileURL"] as? String {
-            return URL(string: urlString)
+            return URL(fileURLWithPath: urlString)
         }
 
         return nil
@@ -201,6 +223,8 @@ final class ColorProfileService: @unchecked Sendable {
     /// Returns true on success.
     @discardableResult
     func setProfile(_ profile: ICCProfile, for displayID: CGDirectDisplayID) -> Bool {
+        // Never hand a non-monitor / non-RGB profile to ColorSync.
+        guard Self.isDisplayRGBProfile(at: profile.path) else { return false }
         guard let rawUUID = CGDisplayCreateUUIDFromDisplayID(displayID) else { return false }
         let uuid = rawUUID.takeRetainedValue()
 
@@ -212,6 +236,23 @@ final class ColorProfileService: @unchecked Sendable {
 
         let profileInfo: NSDictionary = [profileIDKey: profile.path as NSURL]
 
+        return ColorSyncDeviceSetCustomProfiles(
+            deviceClass,
+            uuid,
+            profileInfo as CFDictionary
+        )
+    }
+
+    /// Restores the display's factory/default profile via `kCFNull`.
+    @discardableResult
+    func resetProfile(for displayID: CGDirectDisplayID) -> Bool {
+        guard let rawUUID = CGDisplayCreateUUIDFromDisplayID(displayID) else { return false }
+        let uuid = rawUUID.takeRetainedValue()
+        guard let deviceClass = kColorSyncDisplayDeviceClass?.takeUnretainedValue(),
+              let profileIDKey = kColorSyncDeviceDefaultProfileID?.takeUnretainedValue()
+        else { return false }
+
+        let profileInfo: NSDictionary = [profileIDKey: kCFNull as Any]
         return ColorSyncDeviceSetCustomProfiles(
             deviceClass,
             uuid,

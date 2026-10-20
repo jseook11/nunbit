@@ -85,7 +85,7 @@ struct VirtualDisplayView: View {
                 configToDelete = nil
             }
         } message: {
-            if let id = configToDelete, service.isActive(id) {
+            if let id = configToDelete, service.isOnline(id) {
                 Text("此虚拟显示器当前处于活跃状态，删除后将立即停用。")
             } else {
                 Text("确认删除此虚拟显示器配置？")
@@ -98,10 +98,11 @@ struct VirtualDisplayView: View {
     @ViewBuilder
     private func configRow(config: VirtualDisplayService.VirtualDisplayConfig) -> some View {
         let active = service.isActive(config.id)
+        let online = service.isOnline(config.id)
 
         HStack(spacing: 8) {
             Image(systemName: "display.2")
-                .foregroundColor(active ? .blue : .secondary)
+                .foregroundColor(online ? .blue : .secondary)
                 .frame(width: 20)
 
             VStack(alignment: .leading, spacing: 1) {
@@ -115,8 +116,8 @@ struct VirtualDisplayView: View {
 
             Spacer()
 
-            // Active / inactive badge
-            if active {
+            // Online status is read from WindowServer, not just service bookkeeping.
+            if online {
                 Text("活跃")
                     .font(.caption2)
                     .foregroundColor(.white)
@@ -124,7 +125,30 @@ struct VirtualDisplayView: View {
                     .padding(.vertical, 2)
                     .background(Color.blue)
                     .cornerRadius(4)
+            } else if active {
+                Text("离线")
+                    .font(.caption2)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(Color.orange)
+                    .cornerRadius(4)
             }
+
+            Button {
+                Task { @MainActor in
+                    if service.isOnline(config.id) {
+                        service.deactivate(configID: config.id)
+                    } else {
+                        _ = await service.activate(configID: config.id)
+                    }
+                }
+            } label: {
+                Text(online ? "停用" : "启用")
+                    .font(.caption)
+            }
+            .buttonStyle(.borderless)
+            .help(online ? "停用此虚拟显示器（保留配置）" : "启用此虚拟显示器")
 
             // Delete button
             Button(action: {
@@ -135,7 +159,7 @@ struct VirtualDisplayView: View {
                     .foregroundColor(.red)
             }
             .buttonStyle(.plain)
-            .help("删除此虚拟显示器")
+            .help("删除此虚拟显示器配置")
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
@@ -163,7 +187,7 @@ struct CreateVirtualDisplayForm: View {
     @State private var name: String = "虚拟显示器"
     @State private var selectedPreset: Int = 0
     @State private var hiDPI: Bool = true
-    @State private var autoCreate: Bool = true
+    @State private var autoCreate: Bool = false
 
     private let presets: [(label: String, width: Int, height: Int)] = [
         ("1920×1080 (FHD)", 1920, 1080),

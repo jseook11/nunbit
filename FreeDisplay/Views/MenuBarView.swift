@@ -74,8 +74,12 @@ struct MenuBarView: View {
     @State private var showSettings: Bool = false
     @State private var quitHovered = false
 
+    /// All online displays, including FreeDisplay's virtual displays.
+    /// Virtual displays are shown so the user can change their mode or promote one
+    /// to the main display; they used to be hidden, which made a one-physical +
+    /// one-virtual setup impossible to control from the menu.
     private var visibleDisplays: [DisplayInfo] {
-        displayManager.displays.filter { !virtualDisplayService.isVirtualDisplay($0.displayID) }
+        displayManager.displays
     }
 
     var body: some View {
@@ -136,7 +140,9 @@ struct MenuBarView: View {
 
                 // 组合亮度控制（Phase 2）
                 if settings.showCombinedBrightness {
-                    CombinedBrightnessView(displays: displayManager.displays)
+                    CombinedBrightnessView(displays: displayManager.displays.filter {
+                        !VirtualDisplayService.shared.isVirtualDisplay($0.displayID)
+                    })
                     Divider()
                         .opacity(0.3)
                         .padding(.vertical, 2)
@@ -226,7 +232,10 @@ struct MenuBarView: View {
                 }
 
             }
+            .frame(width: 340, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
         }
+        .frame(minHeight: 60, maxHeight: 640)
 
         Divider().opacity(0.3)
 
@@ -262,7 +271,7 @@ struct MenuBarView: View {
 
         } // end VStack
         .frame(width: 340)
-        .frame(maxHeight: 700)
+        .fixedSize(horizontal: false, vertical: true)
         .padding(.vertical, 8)
         .onReceive(displayManager.$displays) { newDisplays in
             let validIDs = Set(newDisplays.map { $0.displayID })
@@ -280,6 +289,8 @@ struct MenuBarView: View {
 
 struct SettingsView: View {
     @ObservedObject private var settings = SettingsService.shared
+    @EnvironmentObject private var displayManager: DisplayManager
+    @AppStorage("fd.arrangement.externalAbove") private var externalAboveBuiltin = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -346,6 +357,20 @@ struct SettingsView: View {
             .padding(.horizontal, 12)
             .help("在菜单栏显示所有显示器的统一亮度滑块")
 
+            // 自动把外接显示器排到内建显示器上方（默认关闭）
+            Toggle(isOn: $externalAboveBuiltin) {
+                HStack(spacing: 6) {
+                    MenuItemIcon(systemName: "rectangle.3.offgrid", color: .blue)
+                        .accessibilityHidden(true)
+                    Text("自动排列外接显示器")
+                        .font(.body)
+                }
+            }
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            .padding(.horizontal, 12)
+            .help("把外接显示器居中排到内建显示器上方；单显示器或 Mac mini 上通常不需要")
+
             // 启动时检查更新
             Toggle(isOn: $settings.checkUpdatesOnLaunch) {
                 HStack(spacing: 6) {
@@ -361,6 +386,11 @@ struct SettingsView: View {
             .help("每次启动时自动检查是否有新版本可用")
         }
         .padding(.vertical, 6)
+        .onChange(of: externalAboveBuiltin) { _, enabled in
+            if enabled {
+                displayManager.arrangeExternalAboveBuiltin()
+            }
+        }
     }
 }
 

@@ -2,12 +2,9 @@ import CoreGraphics
 import Foundation
 import IOKit
 
-@_silgen_name("CGDisplayIOServicePort")
-private func CGDisplayIOServicePort(_ display: CGDirectDisplayID) -> io_service_t
-
 // CGVirtualDisplay and CGVirtualDisplaySettings are ObjC objects without Sendable
-// conformance, but we only use them sequentially (create on main → pass to background
-// for apply → use result on main), so @unchecked Sendable is safe here.
+// conformance, but we only use them sequentially (create on main → apply on background
+// → register the result on main), so @unchecked Sendable is safe here.
 extension CGVirtualDisplayDescriptor: @unchecked @retroactive Sendable {}
 extension CGVirtualDisplay: @unchecked @retroactive Sendable {}
 extension CGVirtualDisplaySettings: @unchecked @retroactive Sendable {}
@@ -26,14 +23,16 @@ final class VirtualDisplayService: ObservableObject, @unchecked Sendable {
     struct VirtualDisplayConfig: Codable, Identifiable, Equatable {
         let id: UUID
         var name: String
+        /// Logical desktop width in points. For a HiDPI display the backing store is 2×.
         var width: Int
+        /// Logical desktop height in points. For a HiDPI display the backing store is 2×.
         var height: Int
         var refreshRate: Double
         var hiDPI: Bool
         var autoCreate: Bool
 
         init(id: UUID = UUID(), name: String, width: Int, height: Int,
-             refreshRate: Double = 60.0, hiDPI: Bool = true, autoCreate: Bool = true) {
+             refreshRate: Double = 60.0, hiDPI: Bool = true, autoCreate: Bool = false) {
             self.id = id
             self.name = name
             self.width = width
@@ -48,14 +47,20 @@ final class VirtualDisplayService: ObservableObject, @unchecked Sendable {
 
     @Published var configs: [VirtualDisplayConfig] = []
 
-    /// Active config IDs — populated when a CGVirtualDisplay is alive.
+    /// Active config IDs — populated only after the display is confirmed online.
     @Published private(set) var activeConfigIDs: Set<UUID> = []
 
     /// Strong references to live CGVirtualDisplay objects.
     /// Releasing an entry causes the virtual display to disappear immediately.
     private var activeDisplayObjects: [UUID: CGVirtualDisplay] = [:]
 
+    /// The launch-time autoCreate pass. Kept so it can be cancelled on termination.
+    private var autoCreateTask: Task<Void, Never>?
+
     private let configsKey = "fd.VirtualDisplayConfigs"
+    private static let virtualVendorID: UInt32 = 0xEEEE
+    private static let maxDimension = 16_384
+    private static let pixelsPerInch: Double = 110.0
 
     // MARK: - Queries
 
@@ -63,78 +68,135 @@ final class VirtualDisplayService: ObservableObject, @unchecked Sendable {
         activeConfigIDs.contains(configID)
     }
 
-    /// Returns true if `displayID` is a virtual display managed by this service.
+    /// True only when the service has a live object and its display is actually online.
+    /// `activeConfigIDs` is bookkeeping; WindowServer can remove a display without telling us.
+    func isOnline(_ configID: UUID) -> Bool {
+        guard let virtualDisplay = activeDisplayObjects[configID] else { return false }
+        let id = virtualDisplay.displayID
+        return id != kCGNullDirectDisplay && CGDisplayIsOnline(id) != 0
+    }
+
+    func displayID(for configID: UUID) -> CGDirectDisplayID? {
+        guard let id = activeDisplayObjects[configID]?.displayID,
+              id != kCGNullDirectDisplay else { return nil }
+        return id
+    }
+
+    /// Returns true for a display managed by this service, or any other display
+    /// advertising FreeDisplay's virtual vendor ID (for orphan/stale displays).
     func isVirtualDisplay(_ displayID: CGDirectDisplayID) -> Bool {
-        activeDisplayObjects.values.contains { $0.displayID == displayID }
+        if activeDisplayObjects.values.contains(where: { $0.displayID == displayID }) {
+            return true
+        }
+        return CGDisplayVendorNumber(displayID) == Self.virtualVendorID
     }
 
     // MARK: - Create / Destroy
 
-    /// Creates a virtual display from the given config using CGVirtualDisplay private API.
-    /// Returns true on success. The CGVirtualDisplay object is retained in `activeDisplayObjects`.
-    /// The ENTIRE creation (descriptor build + CGVirtualDisplay init + apply) runs off the
-    /// main actor via `runWithTimeout` because any of these calls can block on WindowServer IPC.
+    /// Creates a virtual display from the given config using the CGVirtualDisplay private API.
+    /// Returns true only after the display is confirmed online. The CGVirtualDisplay object
+    /// is retained in `activeDisplayObjects`.
+    ///
+    /// Concurrency: descriptor construction and `CGVirtualDisplay(descriptor:)` run on the
+    /// main actor (required by WindowServer), while `apply(_:)` runs off-main because it can
+    /// block on WindowServer IPC.
     @discardableResult
     func create(config: VirtualDisplayConfig) async -> Bool {
-        let w = config.width
-        let h = config.height
-        let hiDPI = config.hiDPI
+        guard (1...Self.maxDimension).contains(config.width),
+              (1...Self.maxDimension).contains(config.height),
+              config.refreshRate.isFinite,
+              config.refreshRate > 0 else {
+            return false
+        }
 
-        // Step 1-2: Build descriptor + create CGVirtualDisplay ON MAIN ACTOR.
-        // CGVirtualDisplay(descriptor:) requires the main thread (returns nil from background).
+        // Already alive — do not create a duplicate.
+        if isOnline(config.id) { return true }
+        if activeDisplayObjects[config.id] != nil {
+            _ = destroy(configID: config.id)
+        }
+
+        let logicalWidth = config.width
+        let logicalHeight = config.height
+        let backingWidth = config.hiDPI ? logicalWidth * 2 : logicalWidth
+        let backingHeight = config.hiDPI ? logicalHeight * 2 : logicalHeight
+        guard backingWidth <= Self.maxDimension, backingHeight <= Self.maxDimension else {
+            return false
+        }
+
+        let identity = Self.identity(for: config.id)
+
         let descriptor = CGVirtualDisplayDescriptor()
-        let ppi: Double = 110.0
         descriptor.sizeInMillimeters = CGSize(
-            width: Double(w) / ppi * 25.4,
-            height: Double(h) / ppi * 25.4
+            width: Double(logicalWidth) / Self.pixelsPerInch * 25.4,
+            height: Double(logicalHeight) / Self.pixelsPerInch * 25.4
         )
-        descriptor.maxPixelsWide = UInt32(w)
-        descriptor.maxPixelsHigh = UInt32(h)
-        descriptor.name = "FreeDisplay Virtual"
-        descriptor.vendorID = 0xEEEE  // non-zero required — 0 causes CGVirtualDisplay(descriptor:) to return nil
-        descriptor.productID = 0x0001
-        descriptor.serialNum = 0x0001
-        // DO NOT set queue or color primaries — they are not needed and may interfere with creation
+        // maxPixels is the backing-store limit. For HiDPI the logical mode uses half
+        // of this, so a 1920×1080 logical display needs a 3840×2160 backing limit.
+        descriptor.maxPixelsWide = UInt32(backingWidth)
+        descriptor.maxPixelsHigh = UInt32(backingHeight)
+        descriptor.name = config.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "FreeDisplay Virtual"
+            : config.name
+        descriptor.vendorID = Self.virtualVendorID
+        descriptor.productID = identity.product
+        descriptor.serialNum = identity.serial
+        // Leave descriptor.queue unset: the current macOS 26 behavior accepts nil and
+        // setting it has caused creation failures in earlier experiments.
 
         guard let virtualDisplay = CGVirtualDisplay(descriptor: descriptor) else {
             return false
         }
 
-        // Step 3: Build settings with modes
         let settings = CGVirtualDisplaySettings()
-        settings.hiDPI = hiDPI
+        settings.hiDPI = config.hiDPI ? 1 : 0
 
         var modes: [CGVirtualDisplayMode] = []
-        let refreshRates: [Double] = [75.0, 60.0, 50.0]
-        for rate in refreshRates {
-            modes.append(CGVirtualDisplayMode(width: UInt(w), height: UInt(h), refreshRate: rate))
-        }
-        if hiDPI {
-            let hw = w / 2, hh = h / 2
-            if hw >= 1, hh >= 1 {
-                for rate in refreshRates {
-                    modes.append(CGVirtualDisplayMode(width: UInt(hw), height: UInt(hh), refreshRate: rate))
-                }
-            }
-            let qw = w / 4, qh = h / 4
-            if qw >= 1, qh >= 1 {
-                for rate in refreshRates {
-                    modes.append(CGVirtualDisplayMode(width: UInt(qw), height: UInt(qh), refreshRate: rate))
-                }
+        for rate in Self.refreshRates(preferred: config.refreshRate) {
+            // Logical (desktop) mode.
+            modes.append(CGVirtualDisplayMode(
+                width: UInt(logicalWidth),
+                height: UInt(logicalHeight),
+                refreshRate: rate
+            ))
+            // Native backing mode. Present for HiDPI so macOS can offer both
+            // "looks like 1920×1080" and the native 3840×2160 mode.
+            if config.hiDPI {
+                modes.append(CGVirtualDisplayMode(
+                    width: UInt(backingWidth),
+                    height: UInt(backingHeight),
+                    refreshRate: rate
+                ))
             }
         }
         settings.modes = modes
 
-        // Step 4: Apply settings on BACKGROUND thread (blocks on WindowServer IPC).
+        // Apply off-main: this blocks on WindowServer IPC.
         let vd = virtualDisplay
         let s = settings
         let applyResult: Bool = await CGHelpers.runWithTimeout(seconds: 10, fallback: false) {
             vd.apply(s)
         }
         guard applyResult else { return false }
-        guard virtualDisplay.displayID != kCGNullDirectDisplay else { return false }
 
-        // Back on main actor — store the strong reference
+        // displayID and the mode catalog are populated asynchronously after apply().
+        // Poll instead of checking immediately; an immediate check rejects valid displays.
+        var displayID: CGDirectDisplayID = kCGNullDirectDisplay
+        let deadline = Date().addingTimeInterval(5.0)
+        while Date() < deadline {
+            displayID = virtualDisplay.displayID
+            if displayID != kCGNullDirectDisplay && CGDisplayIsOnline(displayID) != 0 {
+                break
+            }
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+
+        guard displayID != kCGNullDirectDisplay, CGDisplayIsOnline(displayID) != 0 else {
+            #if DEBUG
+            print("[VirtualDisplayService] create failed: displayID never came online")
+            #endif
+            return false
+        }
+
         activeDisplayObjects[config.id] = virtualDisplay
         activeConfigIDs.insert(config.id)
         return true
@@ -143,33 +205,65 @@ final class VirtualDisplayService: ObservableObject, @unchecked Sendable {
     /// Destroys all active virtual displays. Called on app termination to avoid
     /// leaving stale displays registered with WindowServer.
     func destroyAll() {
-        for uuid in activeConfigIDs {
-            activeDisplayObjects.removeValue(forKey: uuid)
-        }
+        autoCreateTask?.cancel()
+        autoCreateTask = nil
+        activeDisplayObjects.removeAll()
         activeConfigIDs.removeAll()
     }
 
     /// Destroys the virtual display associated with `configID`.
+    /// ARC releases the CGVirtualDisplay object, which makes the display disappear.
     @discardableResult
     func destroy(configID: UUID) -> Bool {
         guard activeDisplayObjects[configID] != nil else {
             return false
         }
-
-        // ARC releases the CGVirtualDisplay → virtual display disappears
         activeDisplayObjects.removeValue(forKey: configID)
         activeConfigIDs.remove(configID)
-
         return true
+    }
+
+    /// Creates the display for an existing config without changing the config list.
+    @discardableResult
+    func activate(configID: UUID) async -> Bool {
+        guard let config = configs.first(where: { $0.id == configID }) else { return false }
+        return await create(config: config)
+    }
+
+    /// Destroys the display while keeping its config for later activation.
+    @discardableResult
+    func deactivate(configID: UUID) -> Bool {
+        destroy(configID: configID)
+    }
+
+    /// Re-creates active displays that WindowServer dropped after wake/display sleep.
+    func reconcileActiveDisplays() async {
+        for config in configs where activeConfigIDs.contains(config.id) {
+            if isOnline(config.id) { continue }
+
+            #if DEBUG
+            print("[VirtualDisplayService] reconciling dropped virtual display '\(config.name)'")
+            #endif
+            activeDisplayObjects.removeValue(forKey: config.id)
+            activeConfigIDs.remove(config.id)
+            _ = await create(config: config)
+        }
     }
 
     // MARK: - Config Management
 
     @discardableResult
     func addAndCreate(_ config: VirtualDisplayConfig) async -> Bool {
-        guard !configs.contains(where: { $0.id == config.id }) else {
+        if let index = configs.firstIndex(where: { $0.id == config.id }) {
+            // Editing an existing config: replace the live display and persist the change.
+            if activeDisplayObjects[config.id] != nil {
+                _ = destroy(configID: config.id)
+            }
+            configs[index] = config
+            saveConfigs()
             return await create(config: config)
         }
+
         // Create first; only persist on success to avoid stale config if process crashes.
         if await create(config: config) {
             configs.append(config)
@@ -195,48 +289,91 @@ final class VirtualDisplayService: ObservableObject, @unchecked Sendable {
 
         // Re-create virtual displays marked autoCreate after WindowServer stabilises.
         let autoCreateConfigs = configs.filter { $0.autoCreate }
-        if !autoCreateConfigs.isEmpty {
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 800_000_000)
-                for config in autoCreateConfigs {
-                    // After a crash, a virtual display from the previous session may
-                    // still be registered with WindowServer. Skip creation if an online
-                    // virtual display with matching dimensions already exists.
-                    guard !virtualDisplayAlreadyExists(width: config.width, height: config.height) else {
-                        #if DEBUG
-                        print("[VirtualDisplayService] autoCreate skipped — virtual display \(config.width)×\(config.height) already online")
-                        #endif
-                        continue
-                    }
-                    _ = await create(config: config)
+        guard !autoCreateConfigs.isEmpty else { return }
+
+        autoCreateTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            guard !Task.isCancelled, let self else { return }
+
+            for config in autoCreateConfigs {
+                guard !Task.isCancelled else { return }
+
+                // The user may have deleted the config while we were waiting.
+                guard self.configs.contains(where: { $0.id == config.id }) else { continue }
+
+                // A display from a previous process may still be online. We cannot adopt
+                // it (we do not own its CGVirtualDisplay object), so do not create a
+                // duplicate with the same identity.
+                if let existing = self.onlineVirtualDisplay(for: config) {
+                    #if DEBUG
+                    print("[VirtualDisplayService] autoCreate skipped — existing display \(existing) for '\(config.name)'")
+                    #endif
+                    continue
                 }
+
+                _ = await self.create(config: config)
             }
         }
     }
 
-    /// Returns true if any currently-online display matches the given pixel dimensions and
-    /// has no associated IOKit service port (indicating it is a virtual/software display).
-    /// Used by autoCreate to avoid duplicating a display that survived an app crash.
-    private func virtualDisplayAlreadyExists(width: Int, height: Int) -> Bool {
+    /// Finds an online virtual display with the same stable identity as `config`.
+    /// Replaces the old `CGDisplayIOServicePort == 0` check, which returns 0 for
+    /// physical displays on current macOS and therefore misclassifies everything.
+    private func onlineVirtualDisplay(for config: VirtualDisplayConfig) -> CGDirectDisplayID? {
+        let identity = Self.identity(for: config.id)
+
         var displayCount: UInt32 = 0
         CGGetOnlineDisplayList(0, nil, &displayCount)
-        guard displayCount > 0 else { return false }
+        guard displayCount > 0 else { return nil }
+
         var displayIDs = [CGDirectDisplayID](repeating: 0, count: Int(displayCount))
         CGGetOnlineDisplayList(displayCount, &displayIDs, &displayCount)
-        for id in displayIDs {
-            // A software/virtual display has no IOService entry (servicePort == 0 / MACH_PORT_NULL).
-            // Physical displays always have a non-null service port.
-            let servicePort = CGDisplayIOServicePort(id)
-            guard servicePort == 0 || servicePort == MACH_PORT_NULL else { continue }
-            let w = Int(CGDisplayPixelsWide(id))
-            let h = Int(CGDisplayPixelsHigh(id))
-            if w == width && h == height { return true }
+
+        for id in displayIDs where CGDisplayIsOnline(id) != 0 {
+            guard CGDisplayVendorNumber(id) == Self.virtualVendorID,
+                  CGDisplayModelNumber(id) == identity.product,
+                  CGDisplaySerialNumber(id) == identity.serial else { continue }
+            return id
         }
-        return false
+        return nil
     }
 
     private func saveConfigs() {
         guard let data = try? JSONEncoder().encode(configs) else { return }
         UserDefaults.standard.set(data, forKey: configsKey)
+    }
+
+    // MARK: - Stable Identity
+
+    /// Derives a stable product/serial pair from the config UUID. Unlike Swift's
+    /// `hashValue`, this is deterministic across processes and launches, so the
+    /// display UUID stays stable for WindowServer and presets.
+    private static func identity(for id: UUID) -> (product: UInt32, serial: UInt32) {
+        let u = id.uuid
+        let bytes: [UInt8] = [
+            u.0, u.1, u.2, u.3, u.4, u.5, u.6, u.7,
+            u.8, u.9, u.10, u.11, u.12, u.13, u.14, u.15
+        ]
+
+        func word(_ offset: Int) -> UInt32 {
+            UInt32(bytes[offset]) << 24 |
+            UInt32(bytes[offset + 1]) << 16 |
+            UInt32(bytes[offset + 2]) << 8 |
+            UInt32(bytes[offset + 3])
+        }
+
+        var product = word(0)
+        var serial = word(4)
+        if product == 0 { product = 1 }
+        if serial == 0 { serial = 1 }
+        return (product, serial)
+    }
+
+    private static func refreshRates(preferred: Double) -> [Double] {
+        var result: [Double] = []
+        for rate in [preferred, 60.0, 50.0] where rate.isFinite && rate > 0 {
+            if !result.contains(rate) { result.append(rate) }
+        }
+        return result
     }
 }

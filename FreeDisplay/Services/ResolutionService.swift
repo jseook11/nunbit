@@ -223,26 +223,16 @@ final class ResolutionService: @unchecked Sendable {
     // MARK: - CGSConfigureDisplayMode fallback (private API)
 
     /// Applies a mode by its raw modeID using the CGS private API.
-    /// CGSConfigureDisplayMode(connection, displayID, modeID) bypasses some of the
-    /// restrictions that CGConfigureDisplayWithDisplayMode has on certain display configs.
-    /// Does NOT wrap in a CGBeginDisplayConfiguration transaction — CGSConfigureDisplayMode
-    /// manages its own transaction internally; an empty outer transaction would always succeed
-    /// regardless of whether the mode change actually took effect.
+    ///
+    /// DISABLED: the declaration in the bridging header used the wrong first argument
+    /// (a connection ID instead of `CGDisplayConfigRef`) and passed a mode ID where the
+    /// private function expects a mode *index*. Calling it can dereference a small integer
+    /// as a pointer and crash. Keep the failure path safe until a correctly-typed
+    /// implementation is verified against the running WindowServer.
     private func cgsFallback(modeID: UInt32, on displayID: CGDirectDisplayID) async -> Bool {
-        return await Task.detached(priority: .userInitiated) {
-            let connection = CGSMainConnectionID()
-            CGSConfigureDisplayMode(connection, displayID, modeID)
-
-            // Wait for the mode change to propagate before reading back
-            try? await Task.sleep(nanoseconds: 100_000_000)  // 100ms
-
-            // Verify success by checking whether the active modeID changed
-            let newModeID = CGDisplayCopyDisplayMode(displayID)?.ioDisplayModeID
-            let success = newModeID == Int32(bitPattern: modeID)
-            #if DEBUG
-            print("[ResolutionService] CGS fallback: success=\(success) modeID=\(modeID) displayID=\(displayID) activeModeID=\(newModeID as Any)")
-            #endif
-            return success
-        }.value
+        #if DEBUG
+        print("[ResolutionService] CGS fallback disabled (invalid private API signature) modeID=\(modeID) displayID=\(displayID)")
+        #endif
+        return false
     }
 }

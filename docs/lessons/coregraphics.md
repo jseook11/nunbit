@@ -93,3 +93,40 @@
 - **原因**: 用 display.pixelWidth/pixelHeight（来自 CGDisplayPixelsWide/High）作为原生分辨率传入，但显示器当前可能在非原生分辨率
 - **解法**: 用 display.availableModes.max(by: width*height) 获取最大可用模式作为原生分辨率
 - **教训**: CGDisplayPixelsWide/High 返回的是当前模式的像素尺寸，不是面板物理分辨率
+
+### L-028: CGVirtualDisplay 的尺寸是「逻辑尺寸」，不是 backing 像素
+- **现象**: 传 `width=1920, height=1080, hiDPI=1` 后，系统只给出 960×540 的 HiDPI 模式，或者模式列表为空
+- **原因**: `CGVirtualDisplayDescriptor.maxPixelsWide/High` 是 **backing store 上限**，而 `CGVirtualDisplayMode` 的 width/height 是 **逻辑分辨率**。HiDPI 显示器的 backing 是逻辑的 2 倍，所以 1920×1080 逻辑需要 `maxPixels = 3840×2160`，并且 modes 里要同时提供逻辑 1920×1080 和 backing 3840×2160
+- **解法**:
+  ```swift
+  descriptor.maxPixelsWide = UInt32(hiDPI ? logicalWidth * 2 : logicalWidth)
+  settings.hiDPI = hiDPI ? 1 : 0
+  settings.modes = [
+      CGVirtualDisplayMode(width: logicalWidth, height: logicalHeight, refreshRate: rate),
+      CGVirtualDisplayMode(width: backingWidth, height: backingHeight, refreshRate: rate)
+  ]
+  ```
+- **验证**: macOS 26.7.1 上创建 1920×1080 逻辑显示器，读回 `CGDisplayMode` 为 `1920×1080 pixel 3840×2160`，`CGDisplayBounds` 为 1920×1080
+- **教训**: 私有 API 的 `width/height` 语义取决于结构体字段，不能把逻辑尺寸和像素尺寸混用
+- **日期**: 2026-10-20
+
+### L-029: apply() 之后 displayID 不会立即可用
+- **现象**: `create()` 在 `apply(settings)` 后立刻检查 `displayID != kCGNullDirectDisplay`，随机失败
+- **原因**: `apply()` 返回时 WindowServer 只完成了配置提交，displayID 和模式目录是异步填充的
+- **解法**: 轮询 `displayID` + `CGDisplayIsOnline`，最多 5 秒（50ms 间隔）；只有确认 online 后才写入 `activeDisplayObjects`
+- **教训**: 私有 API 的同步返回只代表请求被接受，不代表资源已经可用
+- **日期**: 2026-10-20
+
+### L-030: CGCancelDisplayConfiguration 不能在 Complete 之后调用
+- **现象**: 显示器排列偶发崩溃（EXC_BAD_ACCESS），尤其是在 `CGCompleteDisplayConfiguration` 返回失败时
+- **原因**: `CGCompleteDisplayConfiguration` 无论成功失败都会消费并释放 `CGDisplayConfigRef`；之后再调用 `CGCancelDisplayConfiguration` 是 use-after-free
+- **解法**: 只在 `CGConfigure...` 调用失败、尚未 Complete 时 Cancel；Complete 之后直接返回结果。排列多个显示器时用一个 transaction 一次性提交，避免中间状态触发 reconfiguration 回调风暴
+- **教训**: Begin/Complete/Cancel 是严格的所有权协议，Complete 之后 config 一律视为无效
+- **日期**: 2026-10-20
+
+### L-031: CGDisplayIOServicePort 在 macOS 26 对物理显示器返回 0
+- **现象**: 用「servicePort == 0」识别虚拟显示器，结果把物理显示器也当成虚拟屏，autoCreate 逻辑全部失效
+- **原因**: macOS 26 上 `CGDisplayIOServicePort` 对部分物理显示器（如 Apple Silicon 外接 HDMI/DP）返回 `MACH_PORT_NULL`
+- **解法**: 用 `CGDisplayVendorNumber == 0xEEEE` + 由 config UUID 派生的稳定 `productID/serialNum` 识别自家虚拟显示器；不要用 service port 判断虚实
+- **教训**: 任何「返回 0 表示虚拟」的启发式都会随系统版本失效，优先用自己写入的稳定身份
+- **日期**: 2026-10-20

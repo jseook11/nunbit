@@ -11,6 +11,7 @@
 
 #import <Foundation/Foundation.h>
 #import <CoreGraphics/CoreGraphics.h>
+#import <IOKit/IOKitLib.h>
 
 // MARK: - CGVirtualDisplay Private API (macOS 14+)
 
@@ -39,7 +40,7 @@
 @end
 
 @interface CGVirtualDisplaySettings : NSObject
-@property (nonatomic) BOOL hiDPI;
+@property (nonatomic) uint32_t hiDPI;
 @property (nonatomic, copy) NSArray *modes;
 @end
 

@@ -7,7 +7,7 @@
 | 主题 | 文件 | 条数 |
 |------|------|------|
 | IOKit / DDC / 旋转 / 环境光 / 显示器匹配 / Apple Silicon | [iokit.md](iokit.md) | L-003, L-004, L-005 + 通用条目 |
-| CoreGraphics / HiDPI / CGVirtualDisplay | [coregraphics.md](coregraphics.md) | L-006, L-007, L-020 ~ L-027 + 通用条目 |
+| CoreGraphics / HiDPI / CGVirtualDisplay | [coregraphics.md](coregraphics.md) | L-006, L-007, L-020 ~ L-031 + 通用条目 |
 | SwiftUI / MenuBarExtra / UI 动画 / DDC 缓存 / 性能 | [swiftui.md](swiftui.md) | 通用条目 |
 | 跨 Service 协作 / 并发 / 资源管理 | [services.md](services.md) | L-008 ~ L-019 |
 | Xcode 构建 / Phase 收尾 | [build.md](build.md) | 通用条目 |
