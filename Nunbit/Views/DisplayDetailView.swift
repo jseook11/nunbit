@@ -33,8 +33,11 @@ struct DisplayDetailView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
 
-            // Brightness slider
-            BrightnessSliderView(display: display)
+            // Brightness slider — virtual displays have no backlight, so a brightness
+            // value for them is meaningless (and DDC/gamma writes would target nothing).
+            if !isVirtual {
+                BrightnessSliderView(display: display)
+            }
 
             if !isVirtual {
                 Divider().opacity(0.3).padding(.vertical, 2)

@@ -13,6 +13,8 @@ All notable changes to Nunbit are documented here.
 
 ### Fixed
 - A Swift 6 main-actor violation that killed the app when dragging the brightness slider for an external display.
+- Combined brightness now follows brightness changed elsewhere (individual sliders, System Settings, native keys, monitor buttons) instead of freezing at its first value, and it is hidden when only one physical display is connected.
+- Virtual displays no longer show a brightness slider, receive brightness refreshes, or participate in Auto Brightness sync.
 - Built-in display brightness now works on macOS 26: `CGDisplayIOServicePort` returns 0 and `IODisplayConnect` services no longer exist, so the old IOKit path could neither read nor write the panel. Brightness now goes through the private DisplayServices framework (`DisplayServicesGetBrightness`/`SetBrightness`), with the IOKit/CoreDisplay paths kept as fallbacks. This also fixes Auto Brightness reading a stale constant of 1.0.
 
 ---

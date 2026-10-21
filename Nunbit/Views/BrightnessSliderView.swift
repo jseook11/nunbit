@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 struct BrightnessSliderView: View {
     @ObservedObject var display: DisplayInfo
@@ -113,8 +114,24 @@ struct BrightnessSliderView: View {
             .padding(.vertical, 4)
         }
         .task(id: display.displayID) {
+            // The cached value is only refreshed on display-configuration changes, so a
+            // brightness set from System Settings, the native brightness keys or the
+            // ambient-light sensor would otherwise show up as a stale slider.
+            if display.isBuiltin {
+                await BrightnessService.shared.refreshBrightness(for: display)
+            }
             localBrightness = display.brightness
             updateDDCStatus()
+
+            // Keep following external changes while the panel is visible. The task is
+            // cancelled when MenuBarExtra tears this content down, so this costs nothing
+            // while the menu is closed. DisplayServices reads are microsecond-level.
+            guard display.isBuiltin else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                guard !Task.isCancelled, !isDragging else { continue }
+                await BrightnessService.shared.refreshBrightness(for: display)
+            }
         }
         .onChange(of: display.brightness) { _, newValue in
             if !isDragging && abs(newValue - localBrightness) >= 1 {
@@ -210,8 +227,36 @@ struct CombinedBrightnessView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
-        .onAppear {
+        .task(id: displays.map(\.displayID)) {
+            // Seed from the cached values, then re-read every display: the cache is only
+            // invalidated by display-configuration changes, not by a brightness change
+            // made from System Settings, the native keys or the monitor's own buttons.
             combinedBrightness = averageBrightness
+            await refreshAll()
+            combinedBrightness = averageBrightness
+
+            // Follow changes while the panel is visible. The task dies with the
+            // MenuBarExtra content, so this costs nothing when the menu is closed.
+            // 1 s is enough here: DDC reads are cached for 5 s per VCP code.
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                guard !Task.isCancelled, !isDragging else { continue }
+                await refreshAll()
+                if !isDragging { combinedBrightness = averageBrightness }
+            }
+        }
+        .onReceive(Publishers.MergeMany(displays.map(\.$brightness))) { _ in
+            // Follow individual sliders and polled hardware values immediately;
+            // never fight the user while the combined slider itself is being dragged.
+            if !isDragging {
+                combinedBrightness = averageBrightness
+            }
+        }
+    }
+
+    private func refreshAll() async {
+        for display in displays {
+            await BrightnessService.shared.refreshBrightness(for: display)
         }
     }
 }

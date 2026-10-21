@@ -72,12 +72,6 @@
 - **Fix**: match the service to the built-in display (vendor/product ID of `builtinID`, or restrict the search to the internal panel) before reading, or drop the fallback entirely and report "no builtin display found".
 - **Added on**: 2026-10-21
 
-### B-012: Auto-brightness syncs to virtual displays
-- **File**: `Nunbit/Services/AutoBrightnessService.swift` (`applyBrightness`, the loop over `DisplayManagerAccessor.shared.displays`)
-- **Symptom**: The only filter is `guard !display.isBuiltin`; `DisplayInfo` has no virtual-display flag, so the sync also drives the headless/virtual display. Everywhere else virtual displays are deliberately excluded (`DisplayManager.swift:135,256`, `MenuBarView.swift:145-147`, `PresetService`).
-- **Fix**: add an `isVirtual` property to `DisplayInfo` (set from the known virtual display IDs) and use it for exclusion consistently in auto-brightness, DDC, brightness keys and presets.
-- **Added on**: 2026-10-21
-
 ### B-013: A user dragging a display in System Settings leaves the app's arrangement UI stale
 - **File**: `Nunbit/Services/DisplayManager.swift:14`
 - **Symptom**: The reconfiguration callback filters on `[.addFlag, .removeFlag, .setMainFlag, .setModeFlag]` and returns early for anything else. A pure move sets `.movedFlag`, which is not in that set, so `refreshDisplays`/`refreshExistingDisplayModes` never run and the cached `DisplayInfo.frame` origins keep the old positions until some unrelated change triggers a refresh. The arrangement UI then shows and can re-apply stale coordinates.
@@ -105,6 +99,12 @@
 ---
 
 ## ✅ Resolved
+
+### ~~B-012: Auto-brightness syncs to virtual displays~~
+- **Cause**: `applyBrightness` filtered only on `display.isBuiltin`, so the headless/virtual display received brightness writes.
+- **Fix**: Skip `VirtualDisplayService.shared.isVirtualDisplay(...)` in `AutoBrightnessService`. Also hide the brightness slider for virtual displays in `DisplayDetailView` and skip their brightness refresh in `DisplayManager` — a virtual display has no backlight, so a brightness value for it is meaningless. Brightness keys, presets and the combined control already filtered them.
+- **Resolved on**: 2026-10-21
+- **Lesson**: A display-like object is not always a physical panel. Every per-display capability (brightness, DDC, gamma) must decide explicitly whether virtual displays participate.
 
 ### ~~B-006: The FreeDisplay → Nunbit rename orphaned all of the user's persisted settings~~
 - **Cause**: The rename changed the bundle identifier, so everything the user had configured stayed in the `com.freedisplay.app` domain while the app now reads `com.jseook11.nunbit` (and `~/Library/Application Support/FreeDisplay/` instead of `Nunbit/`).

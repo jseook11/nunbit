@@ -140,11 +140,13 @@ struct MenuBarView: View {
                     .opacity(0.3)
                     .padding(.vertical, 2)
 
-                // Combined brightness control (Phase 2)
-                if settings.showCombinedBrightness {
-                    CombinedBrightnessView(displays: displayManager.displays.filter {
-                        !VirtualDisplayService.shared.isVirtualDisplay($0.displayID)
-                    })
+                // Combined brightness control (Phase 2) — only meaningful when there
+                // are at least two physical displays; virtual displays have no backlight.
+                let physicalDisplays = displayManager.displays.filter {
+                    !VirtualDisplayService.shared.isVirtualDisplay($0.displayID)
+                }
+                if settings.showCombinedBrightness && physicalDisplays.count > 1 {
+                    CombinedBrightnessView(displays: physicalDisplays)
                     Divider()
                         .opacity(0.3)
                         .padding(.vertical, 2)

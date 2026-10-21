@@ -225,7 +225,9 @@ class DisplayManager: ObservableObject {
 
         // Only load details / refresh brightness for newly appeared displays
         for display in addedDisplays {
-            Task { await BrightnessService.shared.refreshBrightness(for: display) }
+            if !VirtualDisplayService.shared.isVirtualDisplay(display.displayID) {
+                Task { await BrightnessService.shared.refreshBrightness(for: display) }
+            }
             Task {
                 await display.loadDetails()
                 // Auto-enable HiDPI for new external 2K+ displays that don't have it yet

@@ -137,8 +137,10 @@ final class AutoBrightnessService: ObservableObject, @unchecked Sendable {
 
         let snapshot = DisplayManagerAccessor.shared.displays
         for display in snapshot {
-            // Only sync to external (non-builtin) displays.
+            // Only sync to physical external displays: the built-in panel drives the
+            // reading, and a virtual display has no backlight to adjust.
             guard !display.isBuiltin else { continue }
+            guard !VirtualDisplayService.shared.isVirtualDisplay(display.displayID) else { continue }
             let current = display.brightness
             if abs(current - targetPercentage) >= 2.0 {
                 await BrightnessService.shared.setBrightness(targetPercentage, for: display, isAutoAdjust: true)
