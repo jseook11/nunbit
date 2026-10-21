@@ -72,26 +72,6 @@ struct VirtualDisplayView: View {
                 .padding(.bottom, 8)
             }
         }
-        .alert("Confirm Deletion", isPresented: Binding(
-            get: { configToDelete != nil },
-            set: { if !$0 { configToDelete = nil } }
-        )) {
-            Button("Delete", role: .destructive) {
-                if let id = configToDelete {
-                    service.removeConfig(id: id)
-                }
-                configToDelete = nil
-            }
-            Button("Cancel", role: .cancel) {
-                configToDelete = nil
-            }
-        } message: {
-            if let id = configToDelete, service.isOnline(id) {
-                Text("This virtual display is currently active and will be disabled immediately if deleted.")
-            } else {
-                Text("Delete this virtual display configuration?")
-            }
-        }
     }
 
     // MARK: - Config Row
@@ -102,80 +82,89 @@ struct VirtualDisplayView: View {
         let online = service.isOnline(config.id)
         let sessionOwned = session.isRunning && session.activeConfigID == config.id
 
-        HStack(spacing: 8) {
-            Image(systemName: "display.2")
-                .foregroundColor(online ? .blue : .secondary)
-                .frame(width: 20)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: "display.2")
+                    .foregroundColor(online ? .blue : .secondary)
+                    .frame(width: 20)
 
-            VStack(alignment: .leading, spacing: 1) {
-                Text(config.name)
-                    .font(.body)
-                    .lineLimit(1)
-                Text("\(config.width)×\(config.height)\(config.hiDPI ? " · HiDPI" : "") · \(Int(config.refreshRate))Hz")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-            }
-
-            Spacer()
-
-            // Online status is read from WindowServer, not just service bookkeeping.
-            if online {
-                Text("Active")
-                    .font(.caption2)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(Color.blue)
-                    .cornerRadius(4)
-            } else if active {
-                Text("Offline")
-                    .font(.caption2)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(Color.orange)
-                    .cornerRadius(4)
-            }
-
-            if sessionOwned {
-                Text("Headless Session")
-                    .font(.caption2)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(Color.indigo)
-                    .cornerRadius(4)
-            }
-
-            Button {
-                Task { @MainActor in
-                    if service.isOnline(config.id) {
-                        service.deactivate(configID: config.id)
-                    } else {
-                        _ = await service.activate(configID: config.id)
-                    }
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(config.name)
+                        .font(.body)
+                        .lineLimit(1)
+                    Text("\(config.width)×\(config.height)\(config.hiDPI ? " · HiDPI" : "") · \(Int(config.refreshRate))Hz")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
                 }
-            } label: {
-                Text(online ? "Disable" : "Enable")
-                    .font(.caption)
-            }
-            .buttonStyle(.borderless)
-            .disabled(sessionOwned)
-            .help(sessionOwned
-                  ? "Headless session is running; cannot disable"
-                  : (online ? "Disable this virtual display (keeps its configuration)" : "Enable this virtual display"))
 
-            // Delete button
-            Button(action: {
-                configToDelete = config.id
-            }) {
-                Label("Delete", systemImage: "trash")
-                    .font(.caption)
-                    .foregroundColor(.red)
+                Spacer()
+
+                // Online status is read from WindowServer, not just service bookkeeping.
+                if online {
+                    Text("Active")
+                        .font(.caption2)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color.blue)
+                        .cornerRadius(4)
+                } else if active {
+                    Text("Offline")
+                        .font(.caption2)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color.orange)
+                        .cornerRadius(4)
+                }
+
+                if sessionOwned {
+                    Text("Headless Session")
+                        .font(.caption2)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color.indigo)
+                        .cornerRadius(4)
+                }
+
+                Button {
+                    Task { @MainActor in
+                        if service.isOnline(config.id) {
+                            service.deactivate(configID: config.id)
+                        } else {
+                            _ = await service.activate(configID: config.id)
+                        }
+                    }
+                } label: {
+                    Text(online ? "Disable" : "Enable")
+                        .font(.caption)
+                }
+                .buttonStyle(.borderless)
+                .disabled(sessionOwned)
+                .help(sessionOwned
+                      ? "Headless session is running; cannot disable"
+                      : (online ? "Disable this virtual display (keeps its configuration)" : "Enable this virtual display"))
+
+                // Delete button
+                Button(action: {
+                    configToDelete = config.id
+                }) {
+                    Label("Delete", systemImage: "trash")
+                        .font(.caption)
+                        .foregroundColor(.red)
+                }
+                .buttonStyle(.plain)
+                .disabled(sessionOwned)
+                .help(sessionOwned ? "Headless session is running; cannot delete" : "Delete this virtual display configuration")
             }
-            .buttonStyle(.plain)
-            .disabled(sessionOwned)
-            .help(sessionOwned ? "Headless session is running; cannot delete" : "Delete this virtual display configuration")
+
+            // Inline confirmation, never a SwiftUI `.alert`: an alert presented from a
+            // `MenuBarExtra` window is hosted in a detached window that cannot take key
+            // input, and clicking it dismisses the whole panel. See L-047.
+            if configToDelete == config.id {
+                deleteConfirmation(for: config, online: online)
+            }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
@@ -191,6 +180,36 @@ struct VirtualDisplayView: View {
             }
             .disabled(sessionOwned)
         }
+    }
+
+    /// In-panel replacement for the deletion alert. It lives inside the menu panel, so
+    /// Return/Escape reach it and no click can dismiss the panel out from under it.
+    @ViewBuilder
+    private func deleteConfirmation(for config: VirtualDisplayService.VirtualDisplayConfig, online: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(online
+                 ? "This virtual display is currently active and will be disabled immediately if deleted."
+                 : "Delete this virtual display configuration?")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 8) {
+                Spacer()
+                Button("Cancel") {
+                    configToDelete = nil
+                }
+                .controlSize(.small)
+                .keyboardShortcut(.cancelAction)
+                Button("Delete", role: .destructive) {
+                    service.removeConfig(id: config.id)
+                    configToDelete = nil
+                }
+                .controlSize(.small)
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(.top, 2)
     }
 }
 
