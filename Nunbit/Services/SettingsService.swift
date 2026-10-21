@@ -4,7 +4,7 @@ import Combine
 
 /// Centralized settings persistence service.
 /// Simple settings use UserDefaults via @AppStorage-compatible keys.
-/// Complex configurations are stored as JSON in ~/Library/Application Support/FreeDisplay/.
+/// Complex configurations are stored as JSON in ~/Library/Application Support/Nunbit/.
 @MainActor
 final class SettingsService: ObservableObject, @unchecked Sendable {
     static let shared = SettingsService()
@@ -12,7 +12,7 @@ final class SettingsService: ObservableObject, @unchecked Sendable {
     private let defaults = UserDefaults.standard
     private let supportDir: URL = {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let dir = base.appendingPathComponent("FreeDisplay", isDirectory: true)
+        let dir = base.appendingPathComponent("Nunbit", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }()

@@ -1,6 +1,18 @@
 # Changelog
 
-All notable changes to FreeDisplay are documented here.
+All notable changes to Nunbit are documented here.
+
+---
+
+## Unreleased
+
+### Changed
+- Renamed the project from FreeDisplay to Nunbit. The bundle identifier is now `com.jseook11.nunbit`, so preferences are reset once on first launch.
+- DDC brightness validates Get VCP replies and assumes a 0–100 range when a panel cannot answer reads, fixing sliders that moved without changing the panel.
+- Auto Brightness can now be switched off when no built-in display is present.
+
+### Fixed
+- A Swift 6 main-actor violation that killed the app when dragging the brightness slider for an external display.
 
 ---
 

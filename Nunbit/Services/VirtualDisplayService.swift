@@ -83,7 +83,7 @@ final class VirtualDisplayService: ObservableObject, @unchecked Sendable {
     }
 
     /// Returns true for a display managed by this service, or any other display
-    /// advertising FreeDisplay's virtual vendor ID (for orphan/stale displays).
+    /// advertising Nunbit's virtual vendor ID (for orphan/stale displays).
     func isVirtualDisplay(_ displayID: CGDirectDisplayID) -> Bool {
         if activeDisplayObjects.values.contains(where: { $0.displayID == displayID }) {
             return true
@@ -135,7 +135,7 @@ final class VirtualDisplayService: ObservableObject, @unchecked Sendable {
         descriptor.maxPixelsWide = UInt32(backingWidth)
         descriptor.maxPixelsHigh = UInt32(backingHeight)
         descriptor.name = config.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? "FreeDisplay Virtual"
+            ? "Nunbit Virtual"
             : config.name
         descriptor.vendorID = Self.virtualVendorID
         descriptor.productID = identity.product

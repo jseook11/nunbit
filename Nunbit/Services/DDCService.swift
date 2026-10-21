@@ -21,7 +21,7 @@ final class DDCService: ObservableObject, @unchecked Sendable {
     static let contrastVCP: UInt8   = 0x12
     static let powerVCP: UInt8      = 0xD6
 
-    private let ddcQueue = DispatchQueue(label: "com.freedisplay.ddc", qos: .userInitiated)
+    private let ddcQueue = DispatchQueue(label: "com.jseook11.ddc", qos: .userInitiated)
 
     // MARK: - VCP Read Cache (5-second TTL)
 

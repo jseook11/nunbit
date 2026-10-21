@@ -92,7 +92,7 @@
 
 ### L-032: Never call a main-actor closure from a background queue
 - **Symptom**: Dragging the brightness slider for an external display in the menu bar instantly kills the app (the whole process exits, not just the panel)
-- **Cause**: `BrightnessService.setBrightness` is `@MainActor`, so its non-`@Sendable` completion handed to `DDCService.writeAsync` inherited main-actor isolation — but `writeAsync` invoked it on `com.freedisplay.ddc`. Swift 6's runtime isolation check called `dispatch_assert_queue`, which fails with SIGTRAP (EXC_BREAKPOINT). The same latent crash existed in `setBrightnessSmooth` (write completion) and `refreshBrightness` (`readAsync` completion).
+- **Cause**: `BrightnessService.setBrightness` is `@MainActor`, so its non-`@Sendable` completion handed to `DDCService.writeAsync` inherited main-actor isolation — but `writeAsync` invoked it on `com.jseook11.ddc`. Swift 6's runtime isolation check called `dispatch_assert_queue`, which fails with SIGTRAP (EXC_BREAKPOINT). The same latent crash existed in `setBrightnessSmooth` (write completion) and `refreshBrightness` (`readAsync` completion).
 - **Fix**: Declare the DDC completion parameters `@MainActor` and deliver them with `Task { @MainActor in completion(...) }` from `ddcQueue`, never by calling them directly on that queue.
 - **Lesson**: A non-`@Sendable` closure parameter inherits the isolation of the enclosing context. If the callee runs it on another queue, Swift 6 traps at runtime even though the code compiles. Either mark the parameter `@Sendable` (and keep the body nonisolated) or mark it `@MainActor` and hop explicitly.
 - **Date**: 2026-10-21

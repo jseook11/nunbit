@@ -43,7 +43,7 @@ Extend the timeout protection pattern for blocking CG calls to the entire projec
 
 ```bash
 # Build passes
-xcodebuild -scheme FreeDisplay -configuration Debug build 2>&1 | tail -3
+xcodebuild -scheme Nunbit -configuration Debug build 2>&1 | tail -3
 
 # Manual tests
 # 1. Enable HiDPI → close lid to sleep → wake → HiDPI restores automatically + arrangement is correct

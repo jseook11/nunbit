@@ -8,7 +8,7 @@ Rewrite the auto brightness feature: abandon the Intel-only AppleLMUController a
 
 ## Technical Approach
 
-macOS already adjusts built-in display brightness automatically (based on ambient light). FreeDisplay only needs to:
+macOS already adjusts built-in display brightness automatically (based on ambient light). Nunbit only needs to:
 1. Poll the current built-in brightness every 2 seconds (`IODisplayGetFloatParameter` or the CoreDisplay private API)
 2. If the brightness changes beyond a threshold (2%), mirror it to the external display according to the user-defined mapping curve
 3. Set the external display brightness via DDC VCP 0x10 or the gamma table software fallback
@@ -60,7 +60,7 @@ macOS already adjusts built-in display brightness automatically (based on ambien
 
 ```bash
 # Build passes
-xcodebuild -scheme FreeDisplay -configuration Debug build 2>&1 | tail -3
+xcodebuild -scheme Nunbit -configuration Debug build 2>&1 | tail -3
 
 # Manual tests
 # 1. Enable auto brightness → adjust the MacBook brightness → external display brightness follows

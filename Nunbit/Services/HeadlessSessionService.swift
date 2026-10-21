@@ -99,7 +99,7 @@ final class HeadlessSessionService: ObservableObject {
     private func finishStart(configID: UUID) async -> Bool {
         guard SleepAssertionService.shared.acquire(
             .headlessSession,
-            reason: "FreeDisplay headless session"
+            reason: "Nunbit headless session"
         ) else {
             await rollbackStart(configID: configID)
             errorMessage = "Could not prevent system sleep"

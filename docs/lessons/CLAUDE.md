@@ -1,4 +1,4 @@
-# Lessons Learned Index — FreeDisplay
+# Lessons Learned Index — Nunbit
 
 > Updated: 2026-03-05
 

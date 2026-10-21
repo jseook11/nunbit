@@ -1,16 +1,16 @@
 #!/bin/bash
-# FreeDisplay — Build & Package Script
+# Nunbit — Build & Package Script
 # Usage:  ./build.sh
-# Output: build/FreeDisplay.dmg
+# Output: build/Nunbit.dmg
 
 set -e
 
 PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
 BUILD_DIR="$PROJECT_ROOT/build"
-ARCHIVE_PATH="$BUILD_DIR/FreeDisplay.xcarchive"
+ARCHIVE_PATH="$BUILD_DIR/Nunbit.xcarchive"
 APP_EXPORT_DIR="$BUILD_DIR/export"
-APP_PATH="$APP_EXPORT_DIR/FreeDisplay.app"
-DMG_PATH="$BUILD_DIR/FreeDisplay.dmg"
+APP_PATH="$APP_EXPORT_DIR/Nunbit.app"
+DMG_PATH="$BUILD_DIR/Nunbit.dmg"
 
 echo "==> Cleaning build dir…"
 rm -rf "$BUILD_DIR"
@@ -18,7 +18,7 @@ mkdir -p "$BUILD_DIR"
 
 echo "==> Archiving (Release)…"
 xcodebuild \
-    -scheme FreeDisplay \
+    -scheme Nunbit \
     -configuration Release \
     archive \
     -archivePath "$ARCHIVE_PATH" \
@@ -34,7 +34,7 @@ xcodebuild \
 
 echo "==> Creating DMG…"
 hdiutil create \
-    -volname "FreeDisplay" \
+    -volname "Nunbit" \
     -srcfolder "$APP_PATH" \
     -ov \
     -format UDZO \

@@ -1,4 +1,4 @@
-# FreeDisplay — Claude Context Entry Point
+# Nunbit — Claude Context Entry Point
 
 > Version: 2026-03-05 | Status: Phase 22 complete
 
@@ -36,7 +36,7 @@ Tech stack: Swift 6 + SwiftUI (MenuBarExtra) + IOKit + CoreGraphics, zero third-
 > **Fixes/development:**
 - Compile failure → fix it until it passes, do not skip it
 - Swift 6 concurrency errors → use `@MainActor` or `@unchecked Sendable` (the project sets `SWIFT_STRICT_CONCURRENCY: minimal`)
-- New files do not require changes to project.yml (xcodegen automatically includes every source file under FreeDisplay/)
+- New files do not require changes to project.yml (xcodegen automatically includes every source file under Nunbit/)
 
 > **SwiftUI component rules:**
 - Row components that need local state (isHovered, isLoading) → must be a standalone `struct`, ❌ cannot be a `@ViewBuilder` function (@ViewBuilder functions do not support @State)
@@ -103,10 +103,10 @@ Tech stack: Swift 6 + SwiftUI (MenuBarExtra) + IOKit + CoreGraphics, zero third-
 
 ```bash
 # 1. Compile check
-xcodebuild -scheme FreeDisplay -configuration Debug build 2>&1 | tail -5
+xcodebuild -scheme Nunbit -configuration Debug build 2>&1 | tail -5
 
 # 2. Coupling check (when interfaces/models change)
-grep -r "DisplayInfo\|DisplayManager\|DDCService" FreeDisplay/ --include="*.swift" | grep -v "^Binary"
+grep -r "DisplayInfo\|DisplayManager\|DDCService" Nunbit/ --include="*.swift" | grep -v "^Binary"
 ```
 
 ## Common Operations Playbook
@@ -136,14 +136,14 @@ grep -r "DisplayInfo\|DisplayManager\|DDCService" FreeDisplay/ --include="*.swif
 - **App icon design**: use [Nano Banana](https://nano-banana.ai/) (an AI image generator powered by Google Gemini) to produce high-quality icons
   - Supports generating icons, logos, and UI elements from text descriptions
   - After generation, use Python PIL to crop/scale into the multi-size PNGs macOS requires (16/32/64/128/256/512/1024)
-  - Icon files live in `FreeDisplay/Assets.xcassets/AppIcon.appiconset/`
+  - Icon files live in `Nunbit/Assets.xcassets/AppIcon.appiconset/`
 
 ## Key Conventions
 
 - **Language**: Swift 6.0 (concurrency checking minimal)
 - **Minimum OS**: macOS 14.0
 - **Architecture**: MVVM (View → ViewModel → Service)
-- **Build**: `xcodegen generate && xcodebuild -scheme FreeDisplay -configuration Debug build`
+- **Build**: `xcodegen generate && xcodebuild -scheme Nunbit -configuration Debug build`
 - **No Sandbox**: entitlements have App Sandbox disabled (required for DDC/IOKit)
 - **No third-party dependencies**: everything uses system frameworks
 

@@ -76,7 +76,7 @@ final class BrightnessService: @unchecked Sendable {
     static let shared = BrightnessService()
     private init() {}
 
-    private let queue = DispatchQueue(label: "com.freedisplay.brightness", qos: .userInitiated)
+    private let queue = DispatchQueue(label: "com.jseook11.brightness", qos: .userInitiated)
 
     // MARK: - Per-display Animators (main thread only)
 

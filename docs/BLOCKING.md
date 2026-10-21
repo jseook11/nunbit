@@ -1,4 +1,4 @@
-# Blocking Issues — FreeDisplay
+# Blocking Issues — Nunbit
 
 > Updated: 2026-03-02 | **Must read before starting work; unresolved P0/P1 issues must be handled first**
 
@@ -37,7 +37,7 @@
 - **Lesson**: There are only two HiDPI approaches on macOS: (1) plist override (the BetterDisplay approach, requires admin + reconnect) (2) a pure CGVirtualDisplay virtual display (does not mirror a physical screen). ❌ Never use CGConfigureDisplayMirrorOfDisplay.
 
 ### ~~B-002: CGVirtualDisplay is a private API with no public header~~
-- **Fix**: The user approved use of the private API. Created FreeDisplay-Bridging-Header.h declaring the CGVirtualDisplay + IOAVService interfaces; VirtualDisplayService now implements full virtual display creation/destruction.
+- **Fix**: The user approved use of the private API. Created Nunbit-Bridging-Header.h declaring the CGVirtualDisplay + IOAVService interfaces; VirtualDisplayService now implements full virtual display creation/destruction.
 - **Resolved on**: 2026-03-03
 
 ### ~~B-003: DDC brightness control has no effect on some external displays~~

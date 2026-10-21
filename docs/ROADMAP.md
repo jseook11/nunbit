@@ -1,4 +1,4 @@
-# Roadmap — FreeDisplay
+# Roadmap — Nunbit
 
 > Created: 2026-03-02 | Goal: a free macOS display management menu bar app that fully replaces BetterDisplay
 > **Detailed implementation hints are in**: `docs/roadmap/phase-N.md`
@@ -54,7 +54,7 @@
 ### Task 1: Preset data model
 - [x] Create `Models/DisplayPreset.swift`
 - [x] Create `Services/PresetService.swift`: load/save/apply presets
-- [x] Presets are stored in `~/Library/Application Support/FreeDisplay/presets.json`
+- [x] Presets are stored in `~/Library/Application Support/Nunbit/presets.json`
 
 ### Task 2: Built-in default presets
 - [x] "HiDPI Mode": enableHiDPIVirtual + 1920×1080 + arrangement
@@ -85,7 +85,7 @@
 
 ### Task 3: DMG packaging
 - [x] Create the `scripts/build-dmg.sh` script
-- [x] Release build + DMG packaging (FreeDisplay.app + Applications shortcut)
+- [x] Release build + DMG packaging (Nunbit.app + Applications shortcut)
 
 ### Task 4: GitHub Release
 - [x] Add feature screenshots to README.md

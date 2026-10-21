@@ -22,7 +22,7 @@ final class SleepAssertionService: ObservableObject {
 
     private var systemAssertionID: IOPMAssertionID = 0
     private var displayAssertionID: IOPMAssertionID = 0
-    private var lastReason = "FreeDisplay"
+    private var lastReason = "Nunbit"
 
     private init() {}
 

@@ -1,4 +1,4 @@
-# AGENTS.md — FreeDisplay Project Harness Configuration
+# AGENTS.md — Nunbit Project Harness Configuration
 
 > This file defines the harness rules for AI agents working on this project.
 > AI agents MUST read this file before making any changes.
@@ -6,7 +6,7 @@
 
 ## Project Overview
 
-- **Name**: FreeDisplay
+- **Name**: Nunbit
 - **Language**: Swift 6.0 (concurrency checking set to minimal)
 - **Framework**: SwiftUI (MenuBarExtra) + AppKit
 - **Package Manager**: None (zero third-party dependencies, all system frameworks)
@@ -33,12 +33,12 @@ Models/         → Pure data structures (DisplayInfo, DisplayMode, DisplayPrese
 
 | Directory | Responsibility |
 |------|------|
-| `FreeDisplay/Services/` | All system-level operations (DDC, brightness, resolution, HiDPI, arrangement, etc.) |
-| `FreeDisplay/Views/` | SwiftUI views, file name format: `XxxView.swift` or `XxxRow.swift` |
-| `FreeDisplay/ViewModels/` | State management, 1:1 with a View or shared across multiple Views |
-| `FreeDisplay/Models/` | Data structures, no side effects |
-| `FreeDisplay/Utilities/` | General-purpose helper functions |
-| `FreeDisplay/Resources/` | Static resources |
+| `Nunbit/Services/` | All system-level operations (DDC, brightness, resolution, HiDPI, arrangement, etc.) |
+| `Nunbit/Views/` | SwiftUI views, file name format: `XxxView.swift` or `XxxRow.swift` |
+| `Nunbit/ViewModels/` | State management, 1:1 with a View or shared across multiple Views |
+| `Nunbit/Models/` | Data structures, no side effects |
+| `Nunbit/Utilities/` | General-purpose helper functions |
+| `Nunbit/Resources/` | Static resources |
 | `docs/` | Project documentation (do not change the structure) |
 | `scripts/` | Build and release scripts |
 
@@ -46,7 +46,7 @@ Models/         → Pure data structures (DisplayInfo, DisplayMode, DisplayPrese
 
 The following files require a clear explanation of the reason before modification:
 
-- `FreeDisplay/FreeDisplay.entitlements` — permission declarations, changes affect signing and App Sandbox
+- `Nunbit/Nunbit.entitlements` — permission declarations, changes affect signing and App Sandbox
 - `project.yml` — XcodeGen configuration, `xcodegen generate` must be re-run after changes
 - `ExportOptions.plist` — release signing configuration
 - `docs/roadmap/` — planning documents, only update `[x]` progress markers, do not change the structure
@@ -85,10 +85,10 @@ The following files require a clear explanation of the reason before modificatio
 
 ```bash
 # Compile check (Debug) — must run after every change
-xcodebuild -scheme FreeDisplay -configuration Debug build 2>&1 | tail -20
+xcodebuild -scheme Nunbit -configuration Debug build 2>&1 | tail -20
 
 # Coupling check (when interfaces/models change)
-grep -r "DisplayInfo\|DisplayManager\|DDCService" FreeDisplay/ --include="*.swift" | grep -v "^Binary"
+grep -r "DisplayInfo\|DisplayManager\|DDCService" Nunbit/ --include="*.swift" | grep -v "^Binary"
 
 # Regenerate xcodeproj (must run when project.yml changes)
 xcodegen generate

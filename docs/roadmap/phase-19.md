@@ -18,7 +18,7 @@ Expand the one-click HiDPI feature into a general display preset system, where u
     - `arrangement: CGPoint?` (optional arrangement position)
     - `enableHiDPIVirtual: Bool` (whether to enable the HiDPI virtual display)
 - [x] Create `Services/PresetService.swift`: load/save/apply presets
-- [x] Store presets in `~/Library/Application Support/FreeDisplay/presets.json`
+- [x] Store presets in `~/Library/Application Support/Nunbit/presets.json`
 
 **Implementation hints**: Match displays with `display.displayUUID` (the stable UUID generation logic already exists). When applying a preset, skip any entry whose display is offline.
 
@@ -49,7 +49,7 @@ Expand the one-click HiDPI feature into a general display preset system, where u
 
 ```bash
 # Build passes
-xcodebuild -scheme FreeDisplay -configuration Debug build 2>&1 | tail -3
+xcodebuild -scheme Nunbit -configuration Debug build 2>&1 | tail -3
 
 # Manual tests
 # 1. Enable HiDPI → save as preset "Work Mode" → turn HiDPI off → click "Work Mode" → HiDPI is restored

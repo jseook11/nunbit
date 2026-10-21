@@ -1,4 +1,4 @@
-# Module Relationships — FreeDisplay
+# Module Relationships — Nunbit
 
 > Module relationship diagram, Services internal dependencies, data flow. See [CLAUDE.md](CLAUDE.md) for the quick reference and [file-tree.md](file-tree.md) for the file tree.
 
@@ -7,7 +7,7 @@
 ## Module Relationship Diagram
 
 ```
-App (FreeDisplayApp)
+App (NunbitApp)
   └── @StateObject DisplayManager
         └── @Published [DisplayInfo]
               └── MenuBarView (@EnvironmentObject DisplayManager)

@@ -5,7 +5,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, @unchecked Sendable {
     private var wakeObserver: NSObjectProtocol?
     private var screensWakeObserver: NSObjectProtocol?
 
-    /// Called by FreeDisplayApp to provide access to the live DisplayManager instance.
+    /// Called by NunbitApp to provide access to the live DisplayManager instance.
     var onWake: (() -> Void)?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -14,7 +14,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, @unchecked Sendable {
             $0.bundleIdentifier == Bundle.main.bundleIdentifier
         }
         if runningApps.count > 1 {
-            print("[FreeDisplay] Another instance is already running, exiting.")
+            print("[Nunbit] Another instance is already running, exiting.")
             NSApp.terminate(nil)
             return
         }

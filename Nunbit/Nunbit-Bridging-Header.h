@@ -1,13 +1,13 @@
 //
-//  FreeDisplay-Bridging-Header.h
-//  FreeDisplay
+//  Nunbit-Bridging-Header.h
+//  Nunbit
 //
 //  Private API declarations for CGVirtualDisplay and IOAVService.
 //  Property names verified against Chromium's virtual_display_mac_util.mm.
 //
 
-#ifndef FreeDisplay_Bridging_Header_h
-#define FreeDisplay_Bridging_Header_h
+#ifndef Nunbit_Bridging_Header_h
+#define Nunbit_Bridging_Header_h
 
 #import <Foundation/Foundation.h>
 #import <CoreGraphics/CoreGraphics.h>
@@ -81,4 +81,4 @@ extern IOReturn IOAVServiceWriteI2C(IOAVServiceRef service,
                                     void *inputBuffer,
                                     uint32_t inputBufferSize);
 
-#endif /* FreeDisplay_Bridging_Header_h */
+#endif /* Nunbit_Bridging_Header_h */

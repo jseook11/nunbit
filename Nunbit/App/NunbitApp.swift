@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct FreeDisplayApp: App {
+struct NunbitApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var displayManager = DisplayManager()
 

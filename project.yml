@@ -1,32 +1,32 @@
-name: FreeDisplay
+name: Nunbit
 options:
-  bundleIdPrefix: com.freedisplay
+  bundleIdPrefix: com.jseook11
   deploymentTarget:
     macOS: "14.0"
 
 targets:
-  FreeDisplay:
+  Nunbit:
     type: application
     platform: macOS
     deploymentTarget: "14.0"
     sources:
-      - path: FreeDisplay
+      - path: Nunbit
         excludes:
           - "**/*.md"
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.freedisplay.app
+        PRODUCT_BUNDLE_IDENTIFIER: com.jseook11.nunbit
         MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: "1"
         INFOPLIST_KEY_LSUIElement: true
-        INFOPLIST_KEY_NSHumanReadableCopyright: "FreeDisplay - Free & Open Source"
+        INFOPLIST_KEY_NSHumanReadableCopyright: "Nunbit - Free & Open Source"
         SWIFT_VERSION: "6.0"
-        CODE_SIGN_ENTITLEMENTS: FreeDisplay/FreeDisplay.entitlements
+        CODE_SIGN_ENTITLEMENTS: Nunbit/Nunbit.entitlements
         ENABLE_HARDENED_RUNTIME: YES
         CODE_SIGNING_REQUIRED: YES
         CODE_SIGN_IDENTITY: "Apple Development"
         DEVELOPMENT_TEAM: 29W56PHWJR
         SWIFT_STRICT_CONCURRENCY: minimal
-        SWIFT_OBJC_BRIDGING_HEADER: FreeDisplay/FreeDisplay-Bridging-Header.h
+        SWIFT_OBJC_BRIDGING_HEADER: Nunbit/Nunbit-Bridging-Header.h
         GENERATE_INFOPLIST_FILE: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

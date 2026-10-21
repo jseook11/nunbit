@@ -11,8 +11,8 @@ echo "=== Building Release ${VERSION} ==="
 # Create GitHub Release
 echo "=== Creating GitHub Release ==="
 gh release create "$VERSION" \
-  --title "FreeDisplay ${VERSION}" \
+  --title "Nunbit ${VERSION}" \
   --notes-file CHANGELOG.md \
-  FreeDisplay.dmg
+  Nunbit.dmg
 
 echo "=== Release ${VERSION} published ==="

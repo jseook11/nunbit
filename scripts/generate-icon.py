@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate FreeDisplay app icon (1024x1024)."""
+"""Generate Nunbit app icon (1024x1024)."""
 
 import math
 from PIL import Image, ImageDraw, ImageFont
@@ -139,7 +139,7 @@ def main():
     refl_draw.polygon(refl_points, fill=(255, 255, 255, 18))
     img = Image.alpha_composite(img, refl_img)
 
-    out_path = "/Users/jm/Desktop/FreeDisplay/scripts/icon_1024.png"
+    out_path = "/Users/jm/Desktop/Nunbit/scripts/icon_1024.png"
     img.save(out_path, "PNG")
     print(f"Saved: {out_path}")
 

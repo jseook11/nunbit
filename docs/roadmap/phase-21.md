@@ -40,7 +40,7 @@ Remove impractical features (rotation, streaming/PiP, color mode inversion, mirr
 **Implementation hints**: MirrorService.swift must NOT be deleted! The HiDPI feature in VirtualDisplayService depends on MirrorService.enableMirror/disableMirror.
 
 ### Task 4: Build verification + cleanup
-- [x] `xcodegen generate && xcodebuild -scheme FreeDisplay -configuration Debug build`
+- [x] `xcodegen generate && xcodebuild -scheme Nunbit -configuration Debug build`
 - [x] Update the code map under `docs/codemap/` to remove records of deleted files
 - [x] Update `README.md`: remove the deleted features from the feature list
 - [x] Update `CHANGELOG.md`: add a v1.1.0 entry documenting the feature trimming
@@ -49,14 +49,14 @@ Remove impractical features (rotation, streaming/PiP, color mode inversion, mirr
 
 ```bash
 # Build passes
-xcodebuild -scheme FreeDisplay -configuration Debug build 2>&1 | tail -3
+xcodebuild -scheme Nunbit -configuration Debug build 2>&1 | tail -3
 
 # Confirm the files are deleted
-ls FreeDisplay/Services/RotationService.swift 2>&1  # should not exist
-ls FreeDisplay/Views/RotationView.swift 2>&1         # should not exist
-ls FreeDisplay/Views/StreamControlView.swift 2>&1    # should not exist
+ls Nunbit/Services/RotationService.swift 2>&1  # should not exist
+ls Nunbit/Views/RotationView.swift 2>&1         # should not exist
+ls Nunbit/Views/StreamControlView.swift 2>&1    # should not exist
 
 # Confirm no references remain
-grep -r "RotationService\|RotationView\|StreamControlView\|PiPControlView\|ColorModeView\|MirrorView" FreeDisplay/ --include="*.swift" | grep -v "^Binary"
+grep -r "RotationService\|RotationView\|StreamControlView\|PiPControlView\|ColorModeView\|MirrorView" Nunbit/ --include="*.swift" | grep -v "^Binary"
 # should return nothing
 ```

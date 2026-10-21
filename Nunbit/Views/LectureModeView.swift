@@ -14,7 +14,7 @@ struct LectureModeView: View {
                 sleep.setHeld(
                     enabled,
                     by: .lecture,
-                    reason: "FreeDisplay lecture playback",
+                    reason: "Nunbit lecture playback",
                     preventDisplaySleep: false
                 )
             }

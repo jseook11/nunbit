@@ -1,0 +1,554 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0EE4D0A032C082C5FCD97BB7 /* BrightnessHUDService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1791F572CA332546128F965C /* BrightnessHUDService.swift */; };
+		10A972AA3CF4808EF7A3F01D /* NSScreenExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBDD9B73EC5E271EDD451D0D /* NSScreenExtension.swift */; };
+		162B7EA7FFFD9C6659F8DCE5 /* DisplayInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FCFA1F48E27246CDAE75F9E /* DisplayInfo.swift */; };
+		16E324470E08258F6D3A3BB3 /* AutoBrightnessView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A14ED77E786CA89458C760C1 /* AutoBrightnessView.swift */; };
+		1C51529EC1CAC68477690993 /* SavePresetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CDA33C9BF12322205CF5D89 /* SavePresetView.swift */; };
+		1EDCD88BDBE57B35C369A52E /* NunbitApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0F9438755659BF9A5D1006B /* NunbitApp.swift */; };
+		26D4C2576E83EFBF6FF1D6E3 /* MirrorService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C1E230F3DE86B9885BCEF49 /* MirrorService.swift */; };
+		27F2E1F53C4DF18AD71827FC /* ResolutionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 340FC54D8BE43FCAD20D7B19 /* ResolutionService.swift */; };
+		36DE7C9B7C5604F7679F3F56 /* ArrangementService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19461724BDB501EBA2AA8D91 /* ArrangementService.swift */; };
+		3BFCF0CCAE778830E29F5608 /* SystemColorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CC4A875CDF336D8755FA2D2 /* SystemColorView.swift */; };
+		3C204B8E08F1FF18B934A815 /* PresetListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C32EE48266D0FA1CA40EA83 /* PresetListView.swift */; };
+		3C9AD5CAB4BFABDCC3FB51B5 /* HeadlessSessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B32BE8C23C0EE119F92665D /* HeadlessSessionView.swift */; };
+		3F73D70839F10446EE3E97B3 /* HiDPIView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D285EFAC42810BCB2CAB2146 /* HiDPIView.swift */; };
+		42F073A1E2ABECFFC102CB19 /* HiDPIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75DD88B311C8AD882E712B3B /* HiDPIService.swift */; };
+		44C03C6B04D829E598F9FF88 /* BrightnessService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A5B3E965D38A62E7B219E80 /* BrightnessService.swift */; };
+		4893653B2C45A1D8807A2E14 /* MainDisplayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42EF1FBFB5ED5D7BFC1ED3F1 /* MainDisplayView.swift */; };
+		4BF77A204DE925F38F5BBC53 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 021E55D80E3597DEC140C288 /* Assets.xcassets */; };
+		4BFB19178047F0B7C306234B /* ColorProfileService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 169B12BD58B7190A0AF29EC6 /* ColorProfileService.swift */; };
+		4EDB33EF7D34F5EE796DCD1A /* DDCService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5628B34A6E71C82A1F7BDF46 /* DDCService.swift */; };
+		4F9CF1E1BA66BE43C048D0C5 /* HeadlessSessionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E0C95D2CACECE50AE7E60A5 /* HeadlessSessionService.swift */; };
+		63824B89DD0F48A1D8CC8831 /* BrightnessKeyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 114D6B8DFD09B6E8C241245A /* BrightnessKeyService.swift */; };
+		63E81AD08E29BE8783B21990 /* DisplayPreset.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89C0D93A5AA62E5878E0BA71 /* DisplayPreset.swift */; };
+		6A882EEFA1A16E1DAE7EA300 /* SettingsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F2B2322AF1F48E1D344223A /* SettingsService.swift */; };
+		6D89F4C05B38ACA49F4BA550 /* LectureModeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2226450CE6C24647234250FB /* LectureModeView.swift */; };
+		6DAFF9C11BEA1A1607CD9A61 /* ImageAdjustmentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B531C10E017D9F2F325CBAA4 /* ImageAdjustmentView.swift */; };
+		6FCAF7A289E043DD1F0680F9 /* NotchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDB5177638CA2FB171D0B704 /* NotchView.swift */; };
+		730B34746323088E15A9A222 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A44F51A50500D8C403787393 /* AppDelegate.swift */; };
+		7A95523C21BE4B71C028B9DB /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 124740E5E9F470F874ED8BB5 /* MenuBarView.swift */; };
+		808A949F06F8BB750969B092 /* GammaService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA962F27823EB9DF7DCE358E /* GammaService.swift */; };
+		8105F56719535050B7744E98 /* PresetService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9DADC236D5857A7192F1202 /* PresetService.swift */; };
+		82ECE596FF87795C7B27934C /* DisplayManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65C00A07F6DC454695B7563B /* DisplayManager.swift */; };
+		940D8F19119413B8454A025E /* NotchOverlayManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DE1F3FE53BEB32E7D90D10C /* NotchOverlayManager.swift */; };
+		94417F48BFD6CF12B4F2FCCF /* UpdateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E064FD829879A85380DC5B66 /* UpdateService.swift */; };
+		9A8AFE9F1AFD1AECBAF4845B /* VirtualDisplayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADC6F0B2F9949053C32607F2 /* VirtualDisplayView.swift */; };
+		AE0D194EF129F86C1F744D2C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A4EBF440A03695DBA87A4051 /* Assets.xcassets */; };
+		AF3E14CDC5BDA9DE97202325 /* SleepAssertionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA282894B2E42FF5957E3C6D /* SleepAssertionService.swift */; };
+		B64FF83807FDD323046B6E46 /* LaunchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D98907827A13FB542846050 /* LaunchService.swift */; };
+		B9B47331E766AB1E22B83827 /* ArrangementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF068C11873DD21B90F34AA7 /* ArrangementView.swift */; };
+		C6BECE43483C69064AF277A7 /* VirtualDisplayService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA196772C87CF9583355351A /* VirtualDisplayService.swift */; };
+		D084B748C153BE5E69473216 /* DisplayModeListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4A1DB15A76F2B8586C085EB /* DisplayModeListView.swift */; };
+		D0CE5BD9FDAD3A2754056618 /* ResolutionSliderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E196671BE2AEB0DE62958FE /* ResolutionSliderView.swift */; };
+		D53222AF0EE41EF084D76E3F /* DisplayDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CFF14997B75C4FC8CE4DAC0 /* DisplayDetailView.swift */; };
+		E1E31F087AF68876DAFCDDC5 /* AutoBrightnessService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40B7C72381A8567294E89A79 /* AutoBrightnessService.swift */; };
+		E683FC71ED76B47B7F63373E /* DisplayMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C4CBB294BD0D96EC808439E /* DisplayMode.swift */; };
+		EBC4E34B313816BFC5E3D3B1 /* CGHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAFCADB551BFC53AB8A06688 /* CGHelpers.swift */; };
+		F39EA321528130DF11F65DAF /* ColorProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9F7FE2E95920B8A335F1900 /* ColorProfileView.swift */; };
+		FD2F1303FE94742D903E56E8 /* BrightnessSliderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FB7B7EC29599C46CCA3E316 /* BrightnessSliderView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		021E55D80E3597DEC140C288 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		0C32EE48266D0FA1CA40EA83 /* PresetListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetListView.swift; sourceTree = "<group>"; };
+		114D6B8DFD09B6E8C241245A /* BrightnessKeyService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrightnessKeyService.swift; sourceTree = "<group>"; };
+		124740E5E9F470F874ED8BB5 /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarView.swift; sourceTree = "<group>"; };
+		169B12BD58B7190A0AF29EC6 /* ColorProfileService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorProfileService.swift; sourceTree = "<group>"; };
+		1791F572CA332546128F965C /* BrightnessHUDService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrightnessHUDService.swift; sourceTree = "<group>"; };
+		19461724BDB501EBA2AA8D91 /* ArrangementService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArrangementService.swift; sourceTree = "<group>"; };
+		1C1E230F3DE86B9885BCEF49 /* MirrorService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MirrorService.swift; sourceTree = "<group>"; };
+		1C4CBB294BD0D96EC808439E /* DisplayMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayMode.swift; sourceTree = "<group>"; };
+		1CFF14997B75C4FC8CE4DAC0 /* DisplayDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayDetailView.swift; sourceTree = "<group>"; };
+		1FB7B7EC29599C46CCA3E316 /* BrightnessSliderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrightnessSliderView.swift; sourceTree = "<group>"; };
+		2226450CE6C24647234250FB /* LectureModeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LectureModeView.swift; sourceTree = "<group>"; };
+		340FC54D8BE43FCAD20D7B19 /* ResolutionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResolutionService.swift; sourceTree = "<group>"; };
+		3E196671BE2AEB0DE62958FE /* ResolutionSliderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResolutionSliderView.swift; sourceTree = "<group>"; };
+		40B7C72381A8567294E89A79 /* AutoBrightnessService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoBrightnessService.swift; sourceTree = "<group>"; };
+		42EF1FBFB5ED5D7BFC1ED3F1 /* MainDisplayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainDisplayView.swift; sourceTree = "<group>"; };
+		4D98907827A13FB542846050 /* LaunchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchService.swift; sourceTree = "<group>"; };
+		4FCFA1F48E27246CDAE75F9E /* DisplayInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayInfo.swift; sourceTree = "<group>"; };
+		5628B34A6E71C82A1F7BDF46 /* DDCService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DDCService.swift; sourceTree = "<group>"; };
+		65C00A07F6DC454695B7563B /* DisplayManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayManager.swift; sourceTree = "<group>"; };
+		6A5B3E965D38A62E7B219E80 /* BrightnessService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrightnessService.swift; sourceTree = "<group>"; };
+		6B32BE8C23C0EE119F92665D /* HeadlessSessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadlessSessionView.swift; sourceTree = "<group>"; };
+		6E0C95D2CACECE50AE7E60A5 /* HeadlessSessionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadlessSessionService.swift; sourceTree = "<group>"; };
+		75DD88B311C8AD882E712B3B /* HiDPIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HiDPIService.swift; sourceTree = "<group>"; };
+		7CC4A875CDF336D8755FA2D2 /* SystemColorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemColorView.swift; sourceTree = "<group>"; };
+		7DE1F3FE53BEB32E7D90D10C /* NotchOverlayManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchOverlayManager.swift; sourceTree = "<group>"; };
+		7F2B2322AF1F48E1D344223A /* SettingsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsService.swift; sourceTree = "<group>"; };
+		89C0D93A5AA62E5878E0BA71 /* DisplayPreset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayPreset.swift; sourceTree = "<group>"; };
+		8CDA33C9BF12322205CF5D89 /* SavePresetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavePresetView.swift; sourceTree = "<group>"; };
+		997C36CFEF35B67F491A94B0 /* Nunbit.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Nunbit.entitlements; sourceTree = "<group>"; };
+		9C270AAA7830B43E8F747CB6 /* Nunbit-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Nunbit-Bridging-Header.h"; sourceTree = "<group>"; };
+		A0F9438755659BF9A5D1006B /* NunbitApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NunbitApp.swift; sourceTree = "<group>"; };
+		A14ED77E786CA89458C760C1 /* AutoBrightnessView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoBrightnessView.swift; sourceTree = "<group>"; };
+		A44F51A50500D8C403787393 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		A4EBF440A03695DBA87A4051 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A9F7FE2E95920B8A335F1900 /* ColorProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorProfileView.swift; sourceTree = "<group>"; };
+		AA282894B2E42FF5957E3C6D /* SleepAssertionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepAssertionService.swift; sourceTree = "<group>"; };
+		ADC6F0B2F9949053C32607F2 /* VirtualDisplayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualDisplayView.swift; sourceTree = "<group>"; };
+		B4A1DB15A76F2B8586C085EB /* DisplayModeListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayModeListView.swift; sourceTree = "<group>"; };
+		B531C10E017D9F2F325CBAA4 /* ImageAdjustmentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageAdjustmentView.swift; sourceTree = "<group>"; };
+		BA196772C87CF9583355351A /* VirtualDisplayService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualDisplayService.swift; sourceTree = "<group>"; };
+		D285EFAC42810BCB2CAB2146 /* HiDPIView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HiDPIView.swift; sourceTree = "<group>"; };
+		D9DADC236D5857A7192F1202 /* PresetService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetService.swift; sourceTree = "<group>"; };
+		DA962F27823EB9DF7DCE358E /* GammaService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GammaService.swift; sourceTree = "<group>"; };
+		DE94E251C93E289FCFB3E541 /* Nunbit.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Nunbit.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E064FD829879A85380DC5B66 /* UpdateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateService.swift; sourceTree = "<group>"; };
+		EBDD9B73EC5E271EDD451D0D /* NSScreenExtension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NSScreenExtension.swift; sourceTree = "<group>"; };
+		FAFCADB551BFC53AB8A06688 /* CGHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CGHelpers.swift; sourceTree = "<group>"; };
+		FDB5177638CA2FB171D0B704 /* NotchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchView.swift; sourceTree = "<group>"; };
+		FF068C11873DD21B90F34AA7 /* ArrangementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArrangementView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		0C5D5FA210AD6D3035EAD832 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				19461724BDB501EBA2AA8D91 /* ArrangementService.swift */,
+				40B7C72381A8567294E89A79 /* AutoBrightnessService.swift */,
+				1791F572CA332546128F965C /* BrightnessHUDService.swift */,
+				114D6B8DFD09B6E8C241245A /* BrightnessKeyService.swift */,
+				6A5B3E965D38A62E7B219E80 /* BrightnessService.swift */,
+				FAFCADB551BFC53AB8A06688 /* CGHelpers.swift */,
+				169B12BD58B7190A0AF29EC6 /* ColorProfileService.swift */,
+				5628B34A6E71C82A1F7BDF46 /* DDCService.swift */,
+				65C00A07F6DC454695B7563B /* DisplayManager.swift */,
+				DA962F27823EB9DF7DCE358E /* GammaService.swift */,
+				6E0C95D2CACECE50AE7E60A5 /* HeadlessSessionService.swift */,
+				75DD88B311C8AD882E712B3B /* HiDPIService.swift */,
+				4D98907827A13FB542846050 /* LaunchService.swift */,
+				1C1E230F3DE86B9885BCEF49 /* MirrorService.swift */,
+				7DE1F3FE53BEB32E7D90D10C /* NotchOverlayManager.swift */,
+				D9DADC236D5857A7192F1202 /* PresetService.swift */,
+				340FC54D8BE43FCAD20D7B19 /* ResolutionService.swift */,
+				7F2B2322AF1F48E1D344223A /* SettingsService.swift */,
+				AA282894B2E42FF5957E3C6D /* SleepAssertionService.swift */,
+				E064FD829879A85380DC5B66 /* UpdateService.swift */,
+				BA196772C87CF9583355351A /* VirtualDisplayService.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		115C714097F9D1850170F0A8 /* Nunbit */ = {
+			isa = PBXGroup;
+			children = (
+				021E55D80E3597DEC140C288 /* Assets.xcassets */,
+				9C270AAA7830B43E8F747CB6 /* Nunbit-Bridging-Header.h */,
+				997C36CFEF35B67F491A94B0 /* Nunbit.entitlements */,
+				B85E18288CDDE21671A63805 /* App */,
+				59374A108DE3070A3A4C2DA3 /* Models */,
+				B8FA1EF32DB81CCA7773C1AB /* Resources */,
+				0C5D5FA210AD6D3035EAD832 /* Services */,
+				6056BB25492F250A1E84F298 /* Utilities */,
+				4D9FE04B3375444AE1D6B7E1 /* Views */,
+			);
+			path = Nunbit;
+			sourceTree = "<group>";
+		};
+		4D9FE04B3375444AE1D6B7E1 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				FF068C11873DD21B90F34AA7 /* ArrangementView.swift */,
+				A14ED77E786CA89458C760C1 /* AutoBrightnessView.swift */,
+				1FB7B7EC29599C46CCA3E316 /* BrightnessSliderView.swift */,
+				A9F7FE2E95920B8A335F1900 /* ColorProfileView.swift */,
+				1CFF14997B75C4FC8CE4DAC0 /* DisplayDetailView.swift */,
+				B4A1DB15A76F2B8586C085EB /* DisplayModeListView.swift */,
+				6B32BE8C23C0EE119F92665D /* HeadlessSessionView.swift */,
+				D285EFAC42810BCB2CAB2146 /* HiDPIView.swift */,
+				B531C10E017D9F2F325CBAA4 /* ImageAdjustmentView.swift */,
+				2226450CE6C24647234250FB /* LectureModeView.swift */,
+				42EF1FBFB5ED5D7BFC1ED3F1 /* MainDisplayView.swift */,
+				124740E5E9F470F874ED8BB5 /* MenuBarView.swift */,
+				FDB5177638CA2FB171D0B704 /* NotchView.swift */,
+				0C32EE48266D0FA1CA40EA83 /* PresetListView.swift */,
+				3E196671BE2AEB0DE62958FE /* ResolutionSliderView.swift */,
+				8CDA33C9BF12322205CF5D89 /* SavePresetView.swift */,
+				7CC4A875CDF336D8755FA2D2 /* SystemColorView.swift */,
+				ADC6F0B2F9949053C32607F2 /* VirtualDisplayView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		59374A108DE3070A3A4C2DA3 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				4FCFA1F48E27246CDAE75F9E /* DisplayInfo.swift */,
+				1C4CBB294BD0D96EC808439E /* DisplayMode.swift */,
+				89C0D93A5AA62E5878E0BA71 /* DisplayPreset.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		6056BB25492F250A1E84F298 /* Utilities */ = {
+			isa = PBXGroup;
+			children = (
+				EBDD9B73EC5E271EDD451D0D /* NSScreenExtension.swift */,
+			);
+			path = Utilities;
+			sourceTree = "<group>";
+		};
+		8C71E59C4255882C30BACB01 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				DE94E251C93E289FCFB3E541 /* Nunbit.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		A5AD171F1C69D714464E7234 = {
+			isa = PBXGroup;
+			children = (
+				115C714097F9D1850170F0A8 /* Nunbit */,
+				8C71E59C4255882C30BACB01 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		B85E18288CDDE21671A63805 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				A44F51A50500D8C403787393 /* AppDelegate.swift */,
+				A0F9438755659BF9A5D1006B /* NunbitApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		B8FA1EF32DB81CCA7773C1AB /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				A4EBF440A03695DBA87A4051 /* Assets.xcassets */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		B1A8500B702A555005EFF1F3 /* Nunbit */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 858301FB739B19C6B337692C /* Build configuration list for PBXNativeTarget "Nunbit" */;
+			buildPhases = (
+				C412655D6B5D3BA61744CF23 /* Sources */,
+				6F6CC11540A64DE4AB343EA3 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Nunbit;
+			packageProductDependencies = (
+			);
+			productName = Nunbit;
+			productReference = DE94E251C93E289FCFB3E541 /* Nunbit.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		3B8986EA29FDA4C739F6EFCC /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					B1A8500B702A555005EFF1F3 = {
+						DevelopmentTeam = 29W56PHWJR;
+					};
+				};
+			};
+			buildConfigurationList = 850665A98A085BD47EB48539 /* Build configuration list for PBXProject "Nunbit" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = A5AD171F1C69D714464E7234;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 8C71E59C4255882C30BACB01 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				B1A8500B702A555005EFF1F3 /* Nunbit */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		6F6CC11540A64DE4AB343EA3 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4BF77A204DE925F38F5BBC53 /* Assets.xcassets in Resources */,
+				AE0D194EF129F86C1F744D2C /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		C412655D6B5D3BA61744CF23 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				730B34746323088E15A9A222 /* AppDelegate.swift in Sources */,
+				36DE7C9B7C5604F7679F3F56 /* ArrangementService.swift in Sources */,
+				B9B47331E766AB1E22B83827 /* ArrangementView.swift in Sources */,
+				E1E31F087AF68876DAFCDDC5 /* AutoBrightnessService.swift in Sources */,
+				16E324470E08258F6D3A3BB3 /* AutoBrightnessView.swift in Sources */,
+				0EE4D0A032C082C5FCD97BB7 /* BrightnessHUDService.swift in Sources */,
+				63824B89DD0F48A1D8CC8831 /* BrightnessKeyService.swift in Sources */,
+				44C03C6B04D829E598F9FF88 /* BrightnessService.swift in Sources */,
+				FD2F1303FE94742D903E56E8 /* BrightnessSliderView.swift in Sources */,
+				EBC4E34B313816BFC5E3D3B1 /* CGHelpers.swift in Sources */,
+				4BFB19178047F0B7C306234B /* ColorProfileService.swift in Sources */,
+				F39EA321528130DF11F65DAF /* ColorProfileView.swift in Sources */,
+				4EDB33EF7D34F5EE796DCD1A /* DDCService.swift in Sources */,
+				D53222AF0EE41EF084D76E3F /* DisplayDetailView.swift in Sources */,
+				162B7EA7FFFD9C6659F8DCE5 /* DisplayInfo.swift in Sources */,
+				82ECE596FF87795C7B27934C /* DisplayManager.swift in Sources */,
+				E683FC71ED76B47B7F63373E /* DisplayMode.swift in Sources */,
+				D084B748C153BE5E69473216 /* DisplayModeListView.swift in Sources */,
+				63E81AD08E29BE8783B21990 /* DisplayPreset.swift in Sources */,
+				808A949F06F8BB750969B092 /* GammaService.swift in Sources */,
+				4F9CF1E1BA66BE43C048D0C5 /* HeadlessSessionService.swift in Sources */,
+				3C9AD5CAB4BFABDCC3FB51B5 /* HeadlessSessionView.swift in Sources */,
+				42F073A1E2ABECFFC102CB19 /* HiDPIService.swift in Sources */,
+				3F73D70839F10446EE3E97B3 /* HiDPIView.swift in Sources */,
+				6DAFF9C11BEA1A1607CD9A61 /* ImageAdjustmentView.swift in Sources */,
+				B64FF83807FDD323046B6E46 /* LaunchService.swift in Sources */,
+				6D89F4C05B38ACA49F4BA550 /* LectureModeView.swift in Sources */,
+				4893653B2C45A1D8807A2E14 /* MainDisplayView.swift in Sources */,
+				7A95523C21BE4B71C028B9DB /* MenuBarView.swift in Sources */,
+				26D4C2576E83EFBF6FF1D6E3 /* MirrorService.swift in Sources */,
+				10A972AA3CF4808EF7A3F01D /* NSScreenExtension.swift in Sources */,
+				940D8F19119413B8454A025E /* NotchOverlayManager.swift in Sources */,
+				6FCAF7A289E043DD1F0680F9 /* NotchView.swift in Sources */,
+				1EDCD88BDBE57B35C369A52E /* NunbitApp.swift in Sources */,
+				3C204B8E08F1FF18B934A815 /* PresetListView.swift in Sources */,
+				8105F56719535050B7744E98 /* PresetService.swift in Sources */,
+				27F2E1F53C4DF18AD71827FC /* ResolutionService.swift in Sources */,
+				D0CE5BD9FDAD3A2754056618 /* ResolutionSliderView.swift in Sources */,
+				1C51529EC1CAC68477690993 /* SavePresetView.swift in Sources */,
+				6A882EEFA1A16E1DAE7EA300 /* SettingsService.swift in Sources */,
+				AF3E14CDC5BDA9DE97202325 /* SleepAssertionService.swift in Sources */,
+				3BFCF0CCAE778830E29F5608 /* SystemColorView.swift in Sources */,
+				94417F48BFD6CF12B4F2FCCF /* UpdateService.swift in Sources */,
+				C6BECE43483C69064AF277A7 /* VirtualDisplayService.swift in Sources */,
+				9A8AFE9F1AFD1AECBAF4845B /* VirtualDisplayView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		32BEA7CF4E8F7C6406B47D8B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		67D621FE626E05106F4EEEC1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		A2D4BC7BAE3A174DA52054EF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGNING_REQUIRED = YES;
+				CODE_SIGN_ENTITLEMENTS = Nunbit/Nunbit.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 29W56PHWJR;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Nunbit - Free & Open Source";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jseook11.nunbit;
+				SDKROOT = macosx;
+				SWIFT_OBJC_BRIDGING_HEADER = "Nunbit/Nunbit-Bridging-Header.h";
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		FE3BE8E3E3E22DAE77F73717 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGNING_REQUIRED = YES;
+				CODE_SIGN_ENTITLEMENTS = Nunbit/Nunbit.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 29W56PHWJR;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Nunbit - Free & Open Source";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jseook11.nunbit;
+				SDKROOT = macosx;
+				SWIFT_OBJC_BRIDGING_HEADER = "Nunbit/Nunbit-Bridging-Header.h";
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		850665A98A085BD47EB48539 /* Build configuration list for PBXProject "Nunbit" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				67D621FE626E05106F4EEEC1 /* Debug */,
+				32BEA7CF4E8F7C6406B47D8B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		858301FB739B19C6B337692C /* Build configuration list for PBXNativeTarget "Nunbit" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A2D4BC7BAE3A174DA52054EF /* Debug */,
+				FE3BE8E3E3E22DAE77F73717 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 3B8986EA29FDA4C739F6EFCC /* Project object */;
+}

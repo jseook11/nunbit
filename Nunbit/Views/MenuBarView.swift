@@ -76,7 +76,7 @@ struct MenuBarView: View {
     @State private var showSettings: Bool = false
     @State private var quitHovered = false
 
-    /// All online displays, including FreeDisplay's virtual displays.
+    /// All online displays, including Nunbit's virtual displays.
     /// Virtual displays are shown so the user can change their mode or promote one
     /// to the main display; they used to be hidden, which made a one-physical +
     /// one-virtual setup impossible to control from the menu.
@@ -271,7 +271,7 @@ struct MenuBarView: View {
 
         // Version and quit (fixed at the bottom, does not scroll with content)
         HStack {
-            Text("FreeDisplay v\(updateService.currentVersion)")
+            Text("Nunbit v\(updateService.currentVersion)")
                 .font(.caption)
                 .fontWeight(.medium)
                 .foregroundColor(.secondary)
@@ -294,7 +294,7 @@ struct MenuBarView: View {
             .buttonStyle(.plain)
             .foregroundColor(quitHovered ? .red : .secondary)
             .onHover { quitHovered = $0 }
-            .help("Quit FreeDisplay")
+            .help("Quit Nunbit")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
@@ -346,7 +346,7 @@ struct SettingsView: View {
             .toggleStyle(.switch)
             .controlSize(.small)
             .padding(.horizontal, 12)
-            .help("Launch FreeDisplay automatically when you log in")
+            .help("Launch Nunbit automatically when you log in")
 
             // First-launch prompt: suggest enabling launch at login
             if !settings.launchAtLoginPrompted {

@@ -2,7 +2,7 @@
 
 > Branch: `personal/headless` · Base: upstream `main` (`07ba072`) · Work window: 2026-10-20 ~ 21
 
-This document describes the changes and usage of a FreeDisplay fork built for personal use.
+This document describes the changes and usage of a Nunbit fork built for personal use.
 It is not intended as a PR to upstream — it is a branch that solves two situations on this Mac.
 
 ## Goals
@@ -74,7 +74,7 @@ It is not intended as a PR to upstream — it is a branch that solves two situat
 
 Completed a Debug build on Xcode 27.1 / macOS 26.7.1.
 
-- `xcodebuild -project FreeDisplay.xcodeproj -scheme FreeDisplay -configuration Debug -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO build` → **BUILD SUCCEEDED**
+- `xcodebuild -project Nunbit.xcodeproj -scheme Nunbit -configuration Debug -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO build` → **BUILD SUCCEEDED**
 - Service/model layer: `swiftc -typecheck` passes.
 - SwiftUI views: Xcode build passes. Additionally verified menu panel and new view layouts via offscreen `NSHostingView` capture.
   - The menu panel renders properly — display list, presets, tools, settings, and footer — instead of an empty screen.
@@ -91,7 +91,7 @@ Completed a Debug build on Xcode 27.1 / macOS 26.7.1.
 ## Current install
 
 - Build: Release, ad-hoc signed
-- Install location: `~/Applications/FreeDisplay.app`
+- Install location: `~/Applications/Nunbit.app`
 - Default virtual display config: `1920×1080` / HiDPI / 60Hz / autoCreate off
 - The `Headless Session` selection is pre-set to that config as well
 
@@ -102,7 +102,7 @@ Completed a Debug build on Xcode 27.1 / macOS 26.7.1.
 sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 brew install xcodegen          # already installed
 xcodegen generate
-xcodebuild -scheme FreeDisplay -configuration Debug build
+xcodebuild -scheme Nunbit -configuration Debug build
 
 # Release + DMG
 ./build.sh
