@@ -68,7 +68,7 @@ Nunbit/
 │       ├── ColorProfileView.swift          # ICC Profile list (recommended/all grouping) and switching; depends on ColorProfileService
 │       ├── DisplayDetailView.swift         # ⚠️ Per-display expansion panel, the container for collapsible Sections (three groups); adding/removing a Section requires editing this file and syncing MenuBarView
 │       ├── DisplayModeListView.swift       # Resolution mode list (HiDPI/native/other grouping), favorites pinned with a star, click to switch; depends on ResolutionService
-│       ├── ImageAdjustmentView.swift       # 11 image adjustment sliders (contrast/gamma/gain/color temperature/per channel/quantization/inversion); depends on GammaService
+│       ├── ImageAdjustmentView.swift       # Gamma/contrast/gain/color temperature/quantization + collapsed Per-Channel Gamma/Gain groups; renders from cached saved state and reconciles with the live adjustment; uses the lightweight CompactSlider instead of the AppKit Slider to keep the MenuBarExtra first paint cheap; depends on GammaService
 │       ├── MainDisplayView.swift           # "Set as Main Display" row, shows a status label when it is already the main display; depends on ArrangementService
 │       ├── MenuBarView.swift               # ⚠️ Menu bar main view: display list + expand/collapse + tools area + settings area + PresetListView; the entry container for every feature, changes affect the global layout
 │       ├── NotchView.swift                 # Notch info display + overlay toggle (shown only on built-in displays that have a notch); depends on NotchOverlayManager

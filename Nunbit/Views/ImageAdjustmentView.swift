@@ -336,6 +336,77 @@ private struct SubgroupRow: View {
     }
 }
 
+/// Lightweight replacement for SwiftUI's AppKit-backed `Slider`.
+///
+/// A cold `NSHostingView` layout of five native sliders measured ~11–15 ms (peaks ~66 ms)
+/// versus ~1.6 ms for this shape-based control. In a `MenuBarExtra` panel that is rebuilt
+/// on every open, that is the difference between a visible hitch and an immediate paint.
+private struct CompactSlider: View {
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+    let step: Double
+    let accent: Color
+    let accessibilityLabel: String
+    let accessibilityValue: (Double) -> String
+    let onCommit: () -> Void
+
+    private var fraction: Double {
+        let span = range.upperBound - range.lowerBound
+        guard span > 0 else { return 0 }
+        return min(1, max(0, (value - range.lowerBound) / span))
+    }
+
+    var body: some View {
+        GeometryReader { geo in
+            let width = geo.size.width
+            let thumbX = max(7, min(width - 7, width * CGFloat(fraction)))
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.secondary.opacity(0.25))
+                    .frame(height: 4)
+                Capsule()
+                    .fill(accent)
+                    .frame(width: thumbX, height: 4)
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: 14, height: 14)
+                    .shadow(color: .black.opacity(0.25), radius: 1, y: 0.5)
+                    .offset(x: thumbX - 7)
+            }
+            .frame(width: width, height: 16)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { gesture in setValue(at: gesture.location.x, width: width) }
+                    .onEnded { _ in onCommit() }
+            )
+        }
+        .frame(height: 16)
+        .accessibilityElement()
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityValue(accessibilityValue(value))
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment:
+                value = min(range.upperBound, value + step)
+                onCommit()
+            case .decrement:
+                value = max(range.lowerBound, value - step)
+                onCommit()
+            @unknown default:
+                break
+            }
+        }
+    }
+
+    private func setValue(at x: CGFloat, width: CGFloat) {
+        guard width > 0 else { return }
+        let position = max(0, min(1, x / width))
+        let raw = range.lowerBound + Double(position) * (range.upperBound - range.lowerBound)
+        value = min(range.upperBound, max(range.lowerBound, (raw / step).rounded() * step))
+    }
+}
+
 private struct AdjustRow: View {
     let icon: String
     let label: String
@@ -371,8 +442,14 @@ private struct AdjustRow: View {
                 .font(.caption)
                 .frame(width: 72, alignment: .leading)
 
-            Slider(value: valueBinding, in: -100...100, step: 1) { editing in
-                if !editing {
+            CompactSlider(
+                value: valueBinding,
+                range: -100...100,
+                step: 1,
+                accent: accent,
+                accessibilityLabel: label,
+                accessibilityValue: percentLabel,
+                onCommit: {
                     commitAction()
                     withAnimation(.easeOut(duration: 0.3)) { highlighted = true }
                     Task { @MainActor in
@@ -380,8 +457,7 @@ private struct AdjustRow: View {
                         withAnimation(.easeOut(duration: 0.3)) { highlighted = false }
                     }
                 }
-            }
-            .tint(accent)
+            )
 
             Text(percentLabel(model[keyPath: keyPath]))
                 .font(.caption)
@@ -417,12 +493,15 @@ private struct QuantizationRow: View {
                 .font(.caption)
                 .frame(width: 72, alignment: .leading)
 
-            Slider(value: valueBinding, in: 2...256, step: 1) { editing in
-                // Commit on release only: the editing-changed closure fires at BOTH
-                // ends, so committing unconditionally wrote the gamma table twice per
-                // drag (once with the pre-drag value).
-                if !editing { commitAction() }
-            }
+            CompactSlider(
+                value: valueBinding,
+                range: 2...256,
+                step: 1,
+                accent: .blue,
+                accessibilityLabel: "Quantization",
+                accessibilityValue: { $0 >= 255 ? "∞" : "\(Int($0))" },
+                onCommit: commitAction
+            )
             .help("Adjust quantization level")
 
             Text(model.quantLevels >= 255 ? "∞" : "\(Int(model.quantLevels))")
