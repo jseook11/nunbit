@@ -2,6 +2,31 @@ import Foundation
 import CoreGraphics
 import Combine
 
+/// Builds per-display UserDefaults keys.
+///
+/// Keys are anchored to the *stable* display UUID, not to `CGDirectDisplayID`: CoreGraphics can
+/// give the same physical display a different ID after sleep, reconnect or reboot, and keying by
+/// the raw ID silently reset the user's saved brightness/contrast/gamma per display.
+///
+/// Reads also perform a one-time lazy migration from the legacy numeric key
+/// (`fd.brightness_3` → `fd.brightness_<uuid>`), so settings written by older builds survive.
+enum PerDisplayStore {
+    static func key(_ prefix: String, for displayID: CGDirectDisplayID) -> String {
+        let stable = prefix + DisplayInfo.stableID(for: displayID)
+        let defaults = UserDefaults.standard
+        if defaults.object(forKey: stable) == nil {
+            let legacy = prefix + "\(displayID)"
+            if let value = defaults.object(forKey: legacy) {
+                defaults.set(value, forKey: stable)
+                // Remove the legacy key so a display that later receives this numeric ID
+                // does not inherit the previous display's settings.
+                defaults.removeObject(forKey: legacy)
+            }
+        }
+        return stable
+    }
+}
+
 /// Centralized settings persistence service.
 /// Simple settings use UserDefaults via @AppStorage-compatible keys.
 /// Complex configurations are stored as JSON in ~/Library/Application Support/Nunbit/.
@@ -31,7 +56,7 @@ final class SettingsService: ObservableObject, @unchecked Sendable {
         static let ddcCacheTTL            = "fd.ddcCacheTTL"
         static let checkUpdatesOnLaunch   = "fd.checkUpdatesOnLaunch"
         static let colorPickerHistory     = "fd.colorPickerHistory"
-        // Per-display keys use prefix + displayID
+        // Per-display keys use prefix + the stable display UUID (see PerDisplayStore)
         static let brightnessPrefix       = "fd.brightness_"
         static let contrastPrefix         = "fd.contrast_"
     }
@@ -73,23 +98,23 @@ final class SettingsService: ObservableObject, @unchecked Sendable {
     // MARK: - Per-Display Settings
 
     func brightness(for displayID: CGDirectDisplayID) -> Double? {
-        let key = Keys.brightnessPrefix + "\(displayID)"
+        let key = PerDisplayStore.key(Keys.brightnessPrefix, for: displayID)
         guard defaults.object(forKey: key) != nil else { return nil }
         return defaults.double(forKey: key)
     }
 
     func setBrightness(_ value: Double, for displayID: CGDirectDisplayID) {
-        defaults.set(value, forKey: Keys.brightnessPrefix + "\(displayID)")
+        defaults.set(value, forKey: PerDisplayStore.key(Keys.brightnessPrefix, for: displayID))
     }
 
     func contrast(for displayID: CGDirectDisplayID) -> Double? {
-        let key = Keys.contrastPrefix + "\(displayID)"
+        let key = PerDisplayStore.key(Keys.contrastPrefix, for: displayID)
         guard defaults.object(forKey: key) != nil else { return nil }
         return defaults.double(forKey: key)
     }
 
     func setContrast(_ value: Double, for displayID: CGDirectDisplayID) {
-        defaults.set(value, forKey: Keys.contrastPrefix + "\(displayID)")
+        defaults.set(value, forKey: PerDisplayStore.key(Keys.contrastPrefix, for: displayID))
     }
 
     // MARK: - Color History

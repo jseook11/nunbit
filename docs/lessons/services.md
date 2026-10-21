@@ -96,3 +96,10 @@
 - **Fix**: Declare the DDC completion parameters `@MainActor` and deliver them with `Task { @MainActor in completion(...) }` from `ddcQueue`, never by calling them directly on that queue.
 - **Lesson**: A non-`@Sendable` closure parameter inherits the isolation of the enclosing context. If the callee runs it on another queue, Swift 6 traps at runtime even though the code compiles. Either mark the parameter `@Sendable` (and keep the body nonisolated) or mark it `@MainActor` and hop explicitly.
 - **Date**: 2026-10-21
+
+### L-035: Per-display settings must not be keyed by CGDirectDisplayID
+- **Symptom**: Saved brightness/contrast/gamma and the saved resolution silently stopped applying after sleep, reconnect or reboot
+- **Cause**: Keys were built as `fd.brightness_<displayID>`, `fd.softBrightness_<displayID>`, `fd.GammaService.savedAdjustment.<displayID>` and `fd.ResolutionService.savedModes["<displayID>"]`. CoreGraphics may hand the same physical display a different ID after a reconnect or reboot, so the saved value was looked up under a key that no longer existed
+- **Fix**: Anchor every per-display key to the stable display UUID (`DisplayInfo.stableID(for:)`, with a vendor/model/serial fallback) through one helper, `PerDisplayStore.key(_:for:)`. That helper also migrates the legacy numeric key on first read, so existing settings survive
+- **Lesson**: Never persist by an identifier the system is allowed to change. If an identifier must be stable across sessions, derive it from hardware (UUID, or vendor+model+serial), not from a runtime handle
+- **Date**: 2026-10-21

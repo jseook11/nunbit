@@ -321,6 +321,8 @@ struct SettingsView: View {
     @ObservedObject private var settings = SettingsService.shared
     @EnvironmentObject private var displayManager: DisplayManager
     @AppStorage("fd.arrangement.externalAbove") private var externalAboveBuiltin = false
+    @AppStorage(DisplayManager.autoEnableHiDPIKey) private var autoEnableHiDPI = false
+    @State private var launchAtLoginError: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -328,12 +330,10 @@ struct SettingsView: View {
             Toggle(isOn: Binding(
                 get: { settings.launchAtLogin },
                 set: { newValue in
-                    if newValue {
-                        LaunchService.shared.enable()
-                    } else {
-                        LaunchService.shared.disable()
-                    }
-                    settings.launchAtLogin = newValue
+                    // Register/unregister, then show the state the system actually reports:
+                    // registration can fail (app not in /Applications, approval pending).
+                    launchAtLoginError = LaunchService.shared.setEnabled(newValue)
+                    settings.launchAtLogin = LaunchService.shared.isEnabled
                 }
             )) {
                 HStack(spacing: 6) {
@@ -347,6 +347,23 @@ struct SettingsView: View {
             .controlSize(.small)
             .padding(.horizontal, 12)
             .help("Launch Nunbit automatically when you log in")
+
+            // Registration failure — the switch above stays off in that case.
+            if let launchAtLoginError {
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.caption2)
+                        .foregroundColor(.red)
+                        .accessibilityHidden(true)
+                    Text(launchAtLoginError)
+                        .font(.caption2)
+                        .foregroundColor(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
+            }
 
             // First-launch prompt: suggest enabling launch at login
             if !settings.launchAtLoginPrompted {
@@ -400,6 +417,21 @@ struct SettingsView: View {
             .controlSize(.small)
             .padding(.horizontal, 12)
             .help("Center external displays above the built-in display; usually not needed with a single display or a Mac mini")
+
+            // Automatically enable HiDPI for newly connected 2K+ displays (off by default:
+            // it writes a privileged override file and requires a reconnect)
+            Toggle(isOn: $autoEnableHiDPI) {
+                HStack(spacing: 6) {
+                    MenuItemIcon(systemName: "sparkles.rectangle.stack", color: .blue)
+                        .accessibilityHidden(true)
+                    Text("Enable HiDPI Automatically")
+                        .font(.body)
+                }
+            }
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            .padding(.horizontal, 12)
+            .help("Off by default. When a 2K+ display is connected, asks for administrator approval once and writes a display override file into /Library/Displays. The display must be reconnected for it to take effect.")
 
             // Check for updates at launch
             Toggle(isOn: $settings.checkUpdatesOnLaunch) {

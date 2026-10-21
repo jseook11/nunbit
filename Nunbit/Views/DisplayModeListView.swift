@@ -147,19 +147,42 @@ struct DisplayModeListView: View {
             var success = await ResolutionService.shared.setDisplayMode(mode, for: displayID)
             if !success {
                 try? await Task.sleep(nanoseconds: 200_000_000)
-                success = await ResolutionService.shared.setDisplayMode(mode, for: displayID)
+                // Only retry when the failed attempt really finished. If it timed out the
+                // display-configuration transaction is still outstanding on CGHelpers'
+                // serial transaction queue, and starting a second one would leave the
+                // display in a state matching neither the UI nor the request.
+                if !CGHelpers.isTransactionInFlight {
+                    success = await ResolutionService.shared.setDisplayMode(mode, for: displayID)
+                }
             }
             if success {
                 try? await Task.sleep(nanoseconds: 300_000_000)
-                let refreshedMode = await Task.detached(priority: .userInitiated) {
+
+                // Report the mode the display actually ended up in — never the mode we
+                // asked for. A HiDPI request can be satisfied by the non-HiDPI mode of the
+                // same logical size, and claiming the request would badge the row HiDPI
+                // while the display is not.
+                let appliedMode = await Task.detached(priority: .userInitiated) {
                     DisplayMode.currentMode(for: displayID)
                 }.value
-                if let rm = refreshedMode, rm.width == mode.width && rm.height == mode.height {
-                    display.currentDisplayMode = rm
+
+                // nil = explicit unknown: the row then shows no "Current" marker at all.
+                display.currentDisplayMode = appliedMode
+
+                // A mode switch changes the mode list (HiDPI modes appear/disappear).
+                HiDPIService.shared.refreshModes(for: display)
+
+                if let appliedMode, !Self.sameVisibleMode(appliedMode, mode) {
+                    withAnimation {
+                        errorMessage = "Display switched to \(Self.describe(appliedMode)) instead of \(Self.describe(mode))."
+                    }
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 3_000_000_000)
+                        withAnimation { errorMessage = nil }
+                    }
                 } else {
-                    display.currentDisplayMode = mode
+                    errorMessage = nil
                 }
-                errorMessage = nil
             } else {
                 withAnimation {
                     errorMessage = "Could not switch to \(mode.resolutionString). Please try again."
@@ -172,6 +195,16 @@ struct DisplayModeListView: View {
             isSwitching = false
             switchingModeID = nil
         }
+    }
+
+    /// True when two modes are indistinguishable in the UI (resolution + HiDPI badge).
+    /// Refresh-rate-only differences do not change what the row displays.
+    private static func sameVisibleMode(_ lhs: DisplayMode, _ rhs: DisplayMode) -> Bool {
+        lhs.width == rhs.width && lhs.height == rhs.height && lhs.isHiDPI == rhs.isHiDPI
+    }
+
+    private static func describe(_ mode: DisplayMode) -> String {
+        mode.isHiDPI ? "\(mode.resolutionString) HiDPI" : mode.resolutionString
     }
 }
 

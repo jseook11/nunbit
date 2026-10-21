@@ -120,13 +120,20 @@ struct ImageAdjustmentView: View {
             }
         }
         .onDisappear {
+            // MenuBarExtra tears its content down on every panel close, so this runs far
+            // more often than "the section was collapsed". It must therefore only persist
+            // state and never touch display hardware: resetting here used to wipe the
+            // ColorSync profile override installed by ColorProfileService and the
+            // software-brightness dimming applied by BrightnessService.
             let isAtZero = contrast == 0 && gammaVal == 0 && gain == 0 &&
                 colorTemperature == 0 && rGamma == 0 && gGamma == 0 && bGamma == 0 &&
                 rGain == 0 && gGain == 0 && bGain == 0 && !isInverted &&
                 quantLevels == 256
             if isAtZero {
+                // At defaults the display already shows the neutral transfer function (the
+                // last commit applied an identity adjustment), so there is nothing to
+                // restore — only the persisted state needs clearing.
                 GammaService.shared.clearSavedState(for: display.displayID)
-                GammaService.shared.resetSingleDisplay(display.displayID)
             } else {
                 let adj = GammaAdjustment(
                     contrast: contrast, gammaVal: gammaVal, gain: gain,
@@ -231,7 +238,12 @@ struct ImageAdjustmentView: View {
         isInverted = false
         isPaused = false
         GammaService.shared.clearSavedState(for: display.displayID)
+        // Reset the gamma transfer table only: the ICC profile override belongs to
+        // ColorProfileService, not to image adjustment, so it must survive this.
         GammaService.shared.resetSingleDisplay(display.displayID)
+        // Resetting gamma must not un-dim a display running on the software brightness
+        // fallback — re-assert the stored factor if there is one.
+        BrightnessService.shared.reapplySoftwareBrightnessIfNeeded(for: display)
     }
 }
 

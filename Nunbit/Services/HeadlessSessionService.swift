@@ -22,6 +22,10 @@ final class HeadlessSessionService: ObservableObject {
     private var previousMainDisplayID: CGDirectDisplayID?
     /// True once the pre-session main display has gone offline (monitor powered off).
     private var physicalWasOffline = false
+    /// True while the pre-session main display owns the menu bar after coming back
+    /// online. Without this latch the reassert triggered by our own main-display change
+    /// would immediately flip main back to the virtual display.
+    private var physicalIsDesignatedMain = false
     /// True when this session created the virtual display (vs. reusing an active one).
     private var createdDisplayForSession = false
 
@@ -78,6 +82,7 @@ final class HeadlessSessionService: ObservableObject {
 
         previousMainDisplayID = previousMain
         physicalWasOffline = false
+        physicalIsDesignatedMain = false
         createdDisplayForSession = !wasOnline
         activeConfigID = configID
 
@@ -132,6 +137,7 @@ final class HeadlessSessionService: ObservableObject {
         activeConfigID = nil
         previousMainDisplayID = nil
         physicalWasOffline = false
+        physicalIsDesignatedMain = false
         createdDisplayForSession = false
         errorMessage = nil
     }
@@ -146,6 +152,7 @@ final class HeadlessSessionService: ObservableObject {
         activeConfigID = nil
         previousMainDisplayID = nil
         physicalWasOffline = false
+        physicalIsDesignatedMain = false
         createdDisplayForSession = false
     }
 
@@ -158,7 +165,8 @@ final class HeadlessSessionService: ObservableObject {
     // MARK: - Display changes
 
     /// A monitor power cycle or wake can make macOS choose a different main display.
-    /// While the session is running, keep the virtual display main.
+    /// While the session is running, keep the virtual display main — except while the
+    /// physical monitor is back online, in which case it keeps the menu bar.
     private func scheduleMainReassert() {
         guard isRunning else { return }
         reassertTask?.cancel()
@@ -169,35 +177,62 @@ final class HeadlessSessionService: ObservableObject {
         }
     }
 
+    /// Re-establishes who owns the main display, and makes sure the session's virtual
+    /// display still exists.
+    ///
+    /// This runs on every screen-parameters change — including the one our own
+    /// main-display switch posts — so it must be idempotent: whenever the state it wants
+    /// is already in effect it performs no configuration write at all, which is what
+    /// stops it from fighting itself.
     private func ensureVirtualDisplayIsMain() async {
         guard isRunning, let configID = activeConfigID else { return }
 
-        // When the physical monitor comes back after being switched off, restore it
-        // as the main display. The session and the game keep running on the virtual
-        // display, but the user can reach the menu bar again to stop the session.
         if let previous = previousMainDisplayID {
             if CGDisplayIsOnline(previous) == 0 {
+                // Physical monitor is off: the virtual display takes the menu bar.
                 physicalWasOffline = true
+                physicalIsDesignatedMain = false
             } else if physicalWasOffline {
+                // Physical monitor came back: give it the menu bar and keep it there.
+                // The session and the game keep running on the virtual display, but the
+                // user can reach the menu again to stop the session.
                 physicalWasOffline = false
-                _ = await ArrangementService.shared.setAsMainDisplay(previous)
+                physicalIsDesignatedMain = true
+            }
+
+            if physicalIsDesignatedMain {
+                if CGDisplayIsMain(previous) == 0 {
+                    _ = await ArrangementService.shared.setAsMainDisplay(previous)
+                }
+                // Still recreate a dropped virtual display so the session survives.
+                await ensureVirtualDisplayOnline(configID: configID)
                 return
             }
         }
+
+        guard await ensureVirtualDisplayOnline(configID: configID) else { return }
 
         let virtualDisplays = VirtualDisplayService.shared
-        if !virtualDisplays.isOnline(configID) {
-            guard let config = virtualDisplays.configs.first(where: { $0.id == configID }) else {
-                return
-            }
-            guard await virtualDisplays.create(config: config) else { return }
-        }
-
         guard let virtualID = virtualDisplays.displayID(for: configID),
               virtualDisplays.isOnline(configID) else { return }
+
+        // The session may have been stopped while the awaits above were in flight.
+        guard isRunning, activeConfigID == configID else { return }
 
         if CGDisplayIsMain(virtualID) == 0 {
             _ = await ArrangementService.shared.setAsMainDisplay(virtualID)
         }
+    }
+
+    /// Re-creates the session's virtual display if WindowServer dropped it (wake, mode
+    /// change). Returns true when the display is online afterwards.
+    @discardableResult
+    private func ensureVirtualDisplayOnline(configID: UUID) async -> Bool {
+        let virtualDisplays = VirtualDisplayService.shared
+        if virtualDisplays.isOnline(configID) { return true }
+        guard let config = virtualDisplays.configs.first(where: { $0.id == configID }) else {
+            return false
+        }
+        return await virtualDisplays.create(config: config)
     }
 }

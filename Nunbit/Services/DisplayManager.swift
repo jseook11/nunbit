@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import CoreGraphics
 
@@ -26,6 +27,10 @@ private func displayReconfigCallback(
             manager.refreshDisplays()
         }
 
+        // Every completed configuration change discards the transfer tables of *all*
+        // displays, so re-assert software brightness and gamma once WindowServer settles.
+        manager.scheduleDisplayStateRestore()
+
         // Auto-rearrange only after structural changes (add/remove/mode).
         // Do NOT arrange on .setMainFlag: that would immediately undo a user's
         // "set as main" action and can create a callback feedback loop.
@@ -42,21 +47,138 @@ class DisplayManager: ObservableObject {
 
     // nonisolated(unsafe) allows deinit (which is nonisolated in Swift 6) to access this value.
     nonisolated(unsafe) private var callbackContext: UnsafeMutableRawPointer?
+    /// Same rationale as `callbackContext`: deinit is nonisolated and must remove it.
+    nonisolated(unsafe) private var wakeObserver: NSObjectProtocol?
+    /// AppKit's screen-parameter notification, which also fires when a `CGVirtualDisplay`
+    /// appears or disappears. The CoreGraphics reconfiguration callback *does* report those
+    /// too (`.addFlag` / `.removeFlag`), but it arrives while the transaction is still
+    /// committing; this one arrives after AppKit has reacted, which gives the state restore
+    /// a second, later chance to land.
+    nonisolated(unsafe) private var screenParametersObserver: NSObjectProtocol?
 
     /// Work item used to debounce auto-arrange calls triggered by display config changes.
     private var autoArrangeWorkItem: DispatchWorkItem?
     /// Ensures the optional initial arrangement runs at most once per app launch.
     private var didScheduleInitialArrange = false
+    /// Post-wake recovery pass, so a second wake cancels a still-pending first one.
+    private var wakeRecoveryTask: Task<Void, Never>?
+    /// Pending display-state restore passes, debounced so a burst of configuration
+    /// callbacks (arrangement + add + mode switch) does not re-apply repeatedly.
+    private var stateRestoreWorkItems: [DispatchWorkItem] = []
+
+    /// Setting key for the opt-in HiDPI auto-enable path. Default off.
+    nonisolated static let autoEnableHiDPIKey = "fd.hidpi.autoEnable"
 
     init() {
         refreshDisplays()
         setupReconfigCallback()
+        setupWakeObserver()
+        setupScreenParametersObserver()
     }
 
     deinit {
         if let ctx = callbackContext {
             CGDisplayRemoveReconfigurationCallback(displayReconfigCallback, ctx)
             Unmanaged<DisplayManager>.fromOpaque(ctx).release()
+        }
+        if let observer = wakeObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+        }
+        if let observer = screenParametersObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
+    // MARK: - Sleep / wake recovery
+
+    /// Observes system wake here rather than through a closure wired up from the
+    /// SwiftUI menu content: `MenuBarExtra` content is built lazily, so a login launch
+    /// where the user never opens the menu used to leave wake recovery uninstalled.
+    private func setupWakeObserver() {
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.scheduleWakeRecovery()
+            }
+        }
+    }
+
+    /// Observes AppKit's screen-parameter notification so a virtual display appearing or
+    /// disappearing also triggers a display-list refresh and a state restore.
+    private func setupScreenParametersObserver() {
+        screenParametersObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshDisplays()
+            }
+        }
+    }
+
+    /// Re-applies display state after the system wakes: re-enumerates displays, then
+    /// re-applies software brightness, gamma and any saved custom resolution.
+    /// The 2-second delay lets WindowServer settle before we touch transfer tables.
+    func scheduleWakeRecovery() {
+        wakeRecoveryTask?.cancel()
+        wakeRecoveryTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            guard !Task.isCancelled, let self else { return }
+
+            self.refreshDisplays()
+
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            guard !Task.isCancelled else { return }
+
+            self.restoreDisplayState()
+
+            for display in self.displays {
+                // Re-apply any custom resolution that macOS may have reset on wake
+                ResolutionService.shared.reapplySavedModeIfNeeded(for: display.displayID)
+            }
+        }
+    }
+
+    // MARK: - Display state recovery after a configuration change
+
+    /// Schedules a debounced re-apply of the per-display state that WindowServer throws
+    /// away whenever the display configuration changes.
+    ///
+    /// The reset is not limited to the display that changed: creating or destroying a
+    /// virtual display takes *every* other display's transfer table back to identity
+    /// (measured on macOS 26 — a display at `lo=0.04 / hi=0.96` returns to `lo=0 / hi=1`).
+    /// Nothing else restores it, so without this pass activating a virtual display left
+    /// the monitor brighter than the user set it, until an unrelated view re-applied the
+    /// adjustment by hand.
+    ///
+    /// Two passes per change: an early one so the visible blip stays short, and a late one
+    /// because a write that lands while WindowServer is still committing the transaction is
+    /// silently discarded — the reconfiguration callback and the AppKit notification can
+    /// both fire mid-commit. Re-applying is idempotent, so the second pass is cheap.
+    private static let stateRestoreDelays: [TimeInterval] = [0.15, 1.2]
+
+    func scheduleDisplayStateRestore() {
+        stateRestoreWorkItems.forEach { $0.cancel() }
+        stateRestoreWorkItems = Self.stateRestoreDelays.map { delay in
+            let item = DispatchWorkItem { [weak self] in
+                self?.restoreDisplayState()
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
+            return item
+        }
+    }
+
+    /// Re-applies software brightness and the gamma adjustment for every online display.
+    /// Software brightness goes first: GammaService folds the factor into its formula,
+    /// so it must be current before the transfer table is written.
+    func restoreDisplayState() {
+        for display in displays where display.isOnline {
+            BrightnessService.shared.reapplySoftwareBrightnessIfNeeded(for: display)
+            GammaService.shared.restoreAfterReconfiguration(for: display.displayID)
         }
     }
 
@@ -110,14 +232,12 @@ class DisplayManager: ObservableObject {
                 }
                 PresetService.shared.refreshBuiltins()
             }
-            // Restore saved gamma/software-brightness adjustments for the reconnected display.
-            // Brief delay lets WindowServer settle before we write transfer tables.
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 300_000_000)
-                BrightnessService.shared.reapplySoftwareBrightnessIfNeeded(for: display)
-                GammaService.shared.reapplyIfNeeded(for: display.displayID)
-            }
         }
+
+        // Saved gamma / software brightness is restored for *all* displays by the
+        // scheduled pass the reconfiguration callback triggers — the reset hits every
+        // display, not only the one that appeared (see `scheduleDisplayStateRestore`).
+        scheduleDisplayStateRestore()
 
         // For displays that were already present, only update bounds/main flag (no DDC probe).
         let keptIDs = currentIDs.intersection(newIDSet)
@@ -127,12 +247,24 @@ class DisplayManager: ObservableObject {
         }
     }
 
-    /// Auto-enables HiDPI plist override for external 2K+ displays that don't have it yet.
+    /// Auto-enables the HiDPI plist override for external 2K+ displays that don't have it yet.
     /// This ensures switching between different monitors "just works" without manual re-enable.
+    ///
+    /// Opt-in only (`fd.hidpi.autoEnable`, default off): enabling writes a persistent
+    /// override into /Library/Displays with administrator privileges, so it must never
+    /// happen without the user asking for it.
     private func autoEnableHiDPIIfNeeded(for display: DisplayInfo) async {
+        guard UserDefaults.standard.bool(forKey: Self.autoEnableHiDPIKey) else { return }
+
         // Virtual displays already control their own HiDPI mode; writing a plist
         // override for vendor 0xEEEE is useless and can trigger an admin prompt.
         guard !VirtualDisplayService.shared.isVirtualDisplay(display.displayID) else { return }
+
+        // macOS already offers HiDPI modes for this display (every 4K+ panel does), so an
+        // override adds nothing — and the mode re-enumeration it triggers can move the
+        // display onto a resolution the user never picked. Nothing to enable.
+        guard !display.availableModes.isEmpty else { return }
+        guard !display.availableModes.contains(where: { $0.isHiDPI }) else { return }
 
         let vendor = display.vendorNumber
         let product = display.modelNumber
@@ -246,6 +378,8 @@ class DisplayManager: ObservableObject {
     /// and centered as a group. Controlled by `fd.arrangement.externalAbove` (default off).
     /// Virtual displays are excluded: they are managed by VirtualDisplayService and must
     /// never be treated as physical monitors by the auto-arranger.
+    /// Displays that are mirroring another display are excluded too: they have no origin
+    /// of their own and are never repositioned (see `ArrangementService.apply`).
     func arrangeExternalAboveBuiltin() {
         guard UserDefaults.standard.bool(forKey: "fd.arrangement.externalAbove") else { return }
         guard let builtin = displays.first(where: { $0.isBuiltin }) else { return }
@@ -253,7 +387,8 @@ class DisplayManager: ObservableObject {
         let externals = displays.filter {
             !$0.isBuiltin &&
             $0.isOnline &&
-            !VirtualDisplayService.shared.isVirtualDisplay($0.displayID)
+            !VirtualDisplayService.shared.isVirtualDisplay($0.displayID) &&
+            CGDisplayMirrorsDisplay($0.displayID) == kCGNullDirectDisplay
         }
         guard !externals.isEmpty else { return }
 

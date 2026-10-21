@@ -46,15 +46,28 @@ Tech stack: Swift 6 + SwiftUI (MenuBarExtra) + IOKit + CoreGraphics, zero third-
 - All UserDefaults keys must carry the `fd.` prefix (e.g. `fd.launchAtLogin`, `fd.AutoBrightnessEnabled`)
 - ❌ Bare keys (e.g. `"launchAtLogin"`) may collide with system or third-party keys
 
+> **Per-display persistence:**
+- Key per-display settings by the **stable display UUID**, ❌ never by `CGDirectDisplayID` — macOS reassigns the ID after sleep, reconnect or reboot, which silently resets the user's saved values
+- Use `PerDisplayStore.key(_:for:)` (which calls `DisplayInfo.stableID(for:)`); it also performs the lazy legacy migration (`fd.brightness_3` → `fd.brightness_<uuid>`)
+- ❌ Do not build per-display keys by string interpolation yourself
+
 > **Coordination principle for shared resources written across Services:**
 - Two Services must not each independently write the same CoreGraphics resource (e.g. gamma table) → designate one Service as the owner responsible for the final write
 - BrightnessService (software brightness) writes the transfer function through GammaService and does not write CGSetDisplayTransferByTable directly
 - ❌ Calling `CGSetDisplayTransferByFormula/Table` directly from the View layer (bypasses GammaService) → ✅ operate indirectly via `GammaService.apply()` or `GammaService.resetSingleDisplay()`
-- ❌ `CGDisplayRestoreColorSyncSettings()` (global) → ✅ `GammaService.resetSingleDisplay(displayID)` resets only a single display
+- ❌ `CGDisplayRestoreColorSyncSettings()` (global) → ✅ `GammaService.resetSingleDisplay(displayID)` resets gamma for a single display only
+- ❌ Never make `resetSingleDisplay` remove the ColorSync profile override. It resets the gamma table only; the ICC override belongs to ColorProfileService and is removed by `GammaService.removeCustomColorProfileOverride(for:)`. Mixing the two silently reverted the user's chosen profile whenever a view disappeared.
 
 > **Sleep/wake handling (mandatory):**
 - Services that write display hardware state (gamma, software brightness) must respond to `NSWorkspace.didWakeNotification` and re-apply
-- Already registered: AppDelegate listens for wake → GammaService.reapplyIfNeeded + BrightnessService.reapplySoftwareBrightnessIfNeeded
+- Wake recovery is owned by `DisplayManager.setupWakeObserver()` (registered in its `init`, removed in `deinit`) → `refreshDisplays` → `BrightnessService.reapplySoftwareBrightnessIfNeeded` → `GammaService.reapplyIfNeeded` → `ResolutionService.reapplySavedModeIfNeeded`
+- ❌ Never install wake recovery from a SwiftUI `.task` inside `MenuBarExtra` — that content is built lazily, so the handler would not exist until the user opens the menu and wake recovery would be silently skipped. AppDelegate only reconciles virtual displays.
+
+> **Display configuration changes (mandatory):**
+- Adding **or** removing any display resets the gamma transfer table of **every** display — including a `CGVirtualDisplay` appearing/disappearing, and including displays that did not change
+- Recovery is owned by `DisplayManager.scheduleDisplayStateRestore()` → re-applies software brightness (first) and the gamma adjustment for all online displays, on two passes (0.15 s and 1.2 s — an early write can land while WindowServer is still committing and be discarded)
+- Triggered from both the `CGDisplayRegisterReconfigurationCallback` and `NSApplication.didChangeScreenParametersNotification` handlers
+- ❌ Do not restore display state from a SwiftUI `.onAppear` — that hides the bug until the user opens the right panel
 
 > **C callback Unmanaged rules:**
 - Long-lived C callbacks (CGDisplayRegisterReconfigurationCallback, etc.) → must use `Unmanaged.passRetained(self)`, `release()` on deregistration
@@ -77,7 +90,9 @@ Tech stack: Swift 6 + SwiftUI (MenuBarExtra) + IOKit + CoreGraphics, zero third-
 
 > **HiDPI implementation approach (mandatory):**
 - ❌ `CGConfigureDisplayMirrorOfDisplay` for HiDPI — triggers hardware mirroring mode + mouse stutter on Apple Silicon
-- ✅ Plist override written to `/Library/Displays/Contents/Resources/Overrides/` — the same approach BetterDisplay uses
+- ✅ First check whether macOS already offers HiDPI modes (`availableModes.contains { $0.isHiDPI }`) — every 4K+ panel does. Then "HiDPI on/off" just switches between the HiDPI and non-HiDPI mode of the **same logical resolution**; ❌ never write an override for such a display (it adds nothing and its mode re-enumeration can move the user onto a resolution they did not pick)
+- ✅ Plist override written to `/Library/Displays/Contents/Resources/Overrides/` — only for displays that have **no** HiDPI mode at all (e.g. 1440p panels); this is the same approach BetterDisplay uses
+- ❌ The HiDPI toggle must not report "a plist override exists" as its state — that shows "disabled" on a display that is already running HiDPI
 - Writing the plist requires administrator privileges → use `NSAppleScript("do shell script ... with administrator privileges")`
 - ❌ Setting `DisplayProductName` in the plist — overrides the system display name
 - After enabling, the display must be reconnected for it to take effect (IOServiceRequestProbe is not always reliable)
@@ -103,11 +118,19 @@ Tech stack: Swift 6 + SwiftUI (MenuBarExtra) + IOKit + CoreGraphics, zero third-
 
 ```bash
 # 1. Compile check
-xcodebuild -scheme Nunbit -configuration Debug build 2>&1 | tail -5
+#    ⚠️ Do NOT pipe this through `tail` — the pipeline's exit code is tail's, so a
+#    FAILED build looks like a success. Print the real status explicitly.
+xcodebuild -scheme Nunbit -configuration Debug build \
+  CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO \
+  2>&1 | tail -25; echo "BUILD EXIT=${pipestatus[1]}"   # bash: ${PIPESTATUS[0]}
 
 # 2. Coupling check (when interfaces/models change)
 grep -r "DisplayInfo\|DisplayManager\|DDCService" Nunbit/ --include="*.swift" | grep -v "^Binary"
 ```
+
+> The signing flags are required: `project.yml` pins `DEVELOPMENT_TEAM: 29W56PHWJR`, which does not
+> match every local signing identity, so a plain `xcodebuild` fails with
+> `No signing certificate "Mac Development" found`. See `docs/BLOCKING.md` B-005.
 
 ## Common Operations Playbook
 
@@ -143,7 +166,7 @@ grep -r "DisplayInfo\|DisplayManager\|DDCService" Nunbit/ --include="*.swift" | 
 - **Language**: Swift 6.0 (concurrency checking minimal)
 - **Minimum OS**: macOS 14.0
 - **Architecture**: MVVM (View → ViewModel → Service)
-- **Build**: `xcodegen generate && xcodebuild -scheme Nunbit -configuration Debug build`
+- **Build**: `xcodegen generate && xcodebuild -scheme Nunbit -configuration Debug build CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO` (signing flags required — see Verification Chain / `docs/BLOCKING.md` B-005)
 - **No Sandbox**: entitlements have App Sandbox disabled (required for DDC/IOKit)
 - **No third-party dependencies**: everything uses system frameworks
 

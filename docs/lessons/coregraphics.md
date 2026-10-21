@@ -130,3 +130,24 @@
 - **Fix**: Identify your own virtual displays using `CGDisplayVendorNumber == 0xEEEE` plus stable `productID/serialNum` derived from the config UUID; do not use the service port to tell virtual from physical
 - **Lesson**: Any heuristic of the form "returns 0 means virtual" will break with OS versions; prefer a stable identity that you wrote yourself
 - **Date**: 2026-10-20
+
+### L-036: Any display-configuration change resets the transfer table of *every* display
+- **Symptom**: With a colour adjustment saved and brightness set low, activating a virtual display made the physical monitor brighter; it only went back when the user opened that display's Image Adjustment panel
+- **Cause**: WindowServer discards the gamma transfer table of all displays whenever the configuration changes. Measured on macOS 26: a display at `lo=0.04 / hi=0.96` reads back `lo=0 / hi=1` immediately after a `CGVirtualDisplay` is created, and again after it is destroyed. It is *not* limited to the display that changed, and it is *not* reported as a mode change — an empty `CGBeginDisplayConfiguration` → `CGConfigureDisplayOrigin` → `CGCompleteDisplayConfiguration` transaction does **not** trigger it, only add/remove does
+- **Fix**: `DisplayManager.scheduleDisplayStateRestore()` re-applies software brightness and gamma for every online display after any configuration change, triggered by both the CoreGraphics reconfiguration callback (which does fire for a virtual display add/remove, with `.addFlag` 0x111a / `.removeFlag` 0x1220) and `NSApplication.didChangeScreenParametersNotification`. Two passes (0.15 s, 1.2 s) because a write issued while the transaction is still committing is silently dropped
+- **Lesson**: An OS-initiated reset of shared hardware state is silent and permanent; recovery has to be an explicit re-assert pass keyed to the event that causes it, not something a view does when it happens to appear
+- **Date**: 2026-10-21
+
+### L-037: "HiDPI enabled" is a property of the display, not of the plist override
+- **Symptom**: A 4K display running "looks like 2560×1440" with a 5120×2880 backing showed the HiDPI row as disabled, and enabling it moved the display to another resolution
+- **Cause**: The row derived its state from whether Nunbit had written a plist override in `/Library/Displays/...`. macOS already offers HiDPI modes natively for every 4K+ panel, so the override was redundant — inert until the next reconnect, and its mode re-enumeration could land the display on `native × 2` backing (7680×4320 on a 4K panel), a resolution the user never picked
+- **Fix**: Derive the state from the display itself (`availableModes.contains { $0.isHiDPI }` and `currentDisplayMode?.isHiDPI`). When macOS provides HiDPI, the toggle switches between the HiDPI and non-HiDPI mode of the **same logical resolution**; the plist override is kept only for displays with no HiDPI mode at all, and an override Nunbit wrote for a display that no longer needs one is reported and removable
+- **Lesson**: A toggle must report the state of the thing the user cares about, not the state of the mechanism the app happens to use. Also: never write a privileged, reconnect-scoped override when the OS already provides the capability
+- **Date**: 2026-10-21
+
+### L-034: "The override file exists" does not mean this app created it
+- **Symptom**: Turning HiDPI off in the UI would have deleted an override that another display tool had written, and turning it on `cp`-overwrote every other key in an existing file (including that tool's scaled modes and metadata)
+- **Cause**: Ownership was inferred from the existence of `.../Overrides/DisplayVendorID-x/DisplayProductID-y`. Several tools write that same path, and a file may contain keys or modes this app never produced. `isHiDPIEnabled` was "a file exists", so a foreign override was displayed as ours and its toggle-off ran `rm -f`
+- **Fix**: Merge instead of replace — read the existing plist, keep every unknown key and union `scale-resolutions`. Record what this app actually created in `~/Library/Application Support/Nunbit/hidpi-overrides.json` (`createdFile`, `ourEntries`, keyed `vendor-product`); delete the file only when `createdFile` is true, otherwise remove only our entries. Report a foreign override as `.managedByOther` and make the toggle a no-op. "Enabled" now means "a non-empty `scale-resolutions` array", not "a file exists"
+- **Lesson**: A shared, privileged on-disk location needs an explicit ownership record. Inferring ownership from existence is how one display tool destroys another's configuration
+- **Date**: 2026-10-21

@@ -6,6 +6,12 @@ struct NunbitApp: App {
     @StateObject private var displayManager = DisplayManager()
 
     var body: some Scene {
+        // Read the state object here, in the app body, so SwiftUI instantiates it at
+        // launch. The menu content below is built lazily, and DisplayManager installs
+        // the wake-recovery observer in its initializer — that must happen on a login
+        // launch even when the user never opens the menu.
+        let _ = displayManager
+
         MenuBarExtra {
             MenuBarView()
                 .environmentObject(displayManager)
@@ -14,27 +20,9 @@ struct NunbitApp: App {
                     // the panel opens. Never run one-shot launch/arrangement work here
                     // without a guard.
                     displayManager.scheduleInitialArrangeOnce()
-
-                    // Wire up the wake-from-sleep handler so AppDelegate can call back
-                    // into the live DisplayManager instance.
-                    appDelegate.onWake = { [weak displayManager] in
-                        guard let dm = displayManager else { return }
-                        Task { @MainActor in
-                            // Give WindowServer 2 seconds to stabilize after wake before
-                            // touching display state.
-                            try? await Task.sleep(nanoseconds: 2_000_000_000)
-                            dm.refreshDisplays()
-                            try? await Task.sleep(nanoseconds: 500_000_000)
-                            for display in dm.displays {
-                                // Apply software brightness factor first so GammaService
-                                // can read the up-to-date factor when it re-applies its formula.
-                                BrightnessService.shared.reapplySoftwareBrightnessIfNeeded(for: display)
-                                GammaService.shared.reapplyIfNeeded(for: display.displayID)
-                                // Re-apply any custom resolution that macOS may have reset on wake
-                                ResolutionService.shared.reapplySavedModeIfNeeded(for: display.displayID)
-                            }
-                        }
-                    }
+                    // Wake recovery is not wired up here on purpose: DisplayManager
+                    // observes didWakeNotification itself, so it works even when the
+                    // user never opens the menu.
                 }
         } label: {
             Image(systemName: "display")

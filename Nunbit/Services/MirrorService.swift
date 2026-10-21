@@ -25,7 +25,7 @@ final class MirrorService: @unchecked Sendable {
     /// Makes `target` mirror `source`.
     /// The entire Begin→Mirror→Complete transaction runs inside `CGHelpers.runWithTimeout`
     /// so `CGCompleteDisplayConfiguration` cannot block indefinitely on WindowServer IPC.
-    /// - Returns: true on success.
+    /// - Returns: true only when `target` actually mirrors `source` afterwards.
     @discardableResult
     func enableMirror(source: CGDirectDisplayID, target: CGDirectDisplayID) async -> Bool {
         // Mirroring a display onto itself is invalid and causes undefined CG behaviour.
@@ -35,17 +35,33 @@ final class MirrorService: @unchecked Sendable {
 #endif
             return false
         }
+        // An offline display cannot join a mirror set; without this guard the
+        // configuration would "succeed" while nothing happened.
+        guard CGDisplayIsOnline(source) != 0, CGDisplayIsOnline(target) != 0 else {
+#if DEBUG
+            print("[MirrorService] enableMirror: source (\(source)) or target (\(target)) is offline")
+#endif
+            return false
+        }
+
         return await CGHelpers.runWithTimeout(seconds: 10, fallback: false) {
             var config: CGDisplayConfigRef?
             guard CGBeginDisplayConfiguration(&config) == .success,
                   let cfg = config else { return false }
-            CGConfigureDisplayMirrorOfDisplay(cfg, target, source)
-            let result = CGCompleteDisplayConfiguration(cfg, .forSession)
-            if result != .success {
+
+            let result = CGConfigureDisplayMirrorOfDisplay(cfg, target, source)
+            guard result == .success else {
+                // Not completed yet: the config is still valid and must be cancelled.
                 CGCancelDisplayConfiguration(cfg)
                 return false
             }
-            return true
+
+            // `CGCompleteDisplayConfiguration` invalidates `config` on both success and
+            // failure — never call CGCancelDisplayConfiguration afterwards.
+            guard CGCompleteDisplayConfiguration(cfg, .forSession) == .success else { return false }
+
+            // Report what actually happened rather than what was requested.
+            return CGDisplayMirrorsDisplay(target) == source
         }
     }
 
@@ -72,20 +88,32 @@ final class MirrorService: @unchecked Sendable {
     /// Stops `displayID` from mirroring.
     /// The entire Begin→Mirror→Complete transaction runs inside `CGHelpers.runWithTimeout`
     /// so `CGCompleteDisplayConfiguration` cannot block indefinitely on WindowServer IPC.
-    /// - Returns: true on success.
+    /// - Returns: true only when `displayID` is no longer mirroring anything afterwards.
     @discardableResult
     func disableMirror(displayID: CGDirectDisplayID) async -> Bool {
+        guard CGDisplayIsOnline(displayID) != 0 else {
+            // An offline display cannot be mirroring; the requested end state already holds.
+            return CGDisplayMirrorsDisplay(displayID) == kCGNullDirectDisplay
+        }
+
         return await CGHelpers.runWithTimeout(seconds: 10, fallback: false) {
             var config: CGDisplayConfigRef?
             guard CGBeginDisplayConfiguration(&config) == .success,
                   let cfg = config else { return false }
-            CGConfigureDisplayMirrorOfDisplay(cfg, displayID, kCGNullDirectDisplay)
-            let result = CGCompleteDisplayConfiguration(cfg, .forSession)
-            if result != .success {
+
+            let result = CGConfigureDisplayMirrorOfDisplay(cfg, displayID, kCGNullDirectDisplay)
+            guard result == .success else {
+                // Not completed yet: the config is still valid and must be cancelled.
                 CGCancelDisplayConfiguration(cfg)
                 return false
             }
-            return true
+
+            // `CGCompleteDisplayConfiguration` invalidates `config` on both success and
+            // failure — never call CGCancelDisplayConfiguration afterwards.
+            guard CGCompleteDisplayConfiguration(cfg, .forSession) == .success else { return false }
+
+            // Report what actually happened rather than what was requested.
+            return CGDisplayMirrorsDisplay(displayID) == kCGNullDirectDisplay
         }
     }
 }

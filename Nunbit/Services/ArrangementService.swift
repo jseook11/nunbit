@@ -21,16 +21,34 @@ class ArrangementService {
     /// Important: `CGCompleteDisplayConfiguration` invalidates `config` on both success
     /// and failure. Never call `CGCancelDisplayConfiguration` after it — that is a
     /// use-after-free. Cancel only when a `CGConfigure...` call fails *before* completion.
+    ///
+    /// Displays that are mirroring another display are skipped: per
+    /// CGDisplayConfiguration.h, "setting the origin of a display which is mirroring
+    /// another display will remove that display from any mirroring set". Entries whose
+    /// origin is already in effect are skipped as well, so an idempotent call never posts
+    /// a needless configuration change (which would re-enter the reconfiguration callback).
     @discardableResult
     func apply(origins: [(id: CGDirectDisplayID, x: Int32, y: Int32)]) async -> Bool {
         guard !origins.isEmpty else { return false }
+
+        let effective = origins.filter { item in
+            guard CGDisplayIsOnline(item.id) != 0 else { return false }
+            // Mirroring displays have no independent origin — leave the mirror set intact.
+            guard CGDisplayMirrorsDisplay(item.id) == kCGNullDirectDisplay else { return false }
+            let bounds = CGDisplayBounds(item.id)
+            return abs(bounds.origin.x - CGFloat(item.x)) > 1 ||
+                   abs(bounds.origin.y - CGFloat(item.y)) > 1
+        }
+
+        // Everything requested is either already in effect or must not be touched.
+        guard !effective.isEmpty else { return true }
 
         return await CGHelpers.runWithTimeout(seconds: 10, fallback: false) {
             var config: CGDisplayConfigRef?
             guard CGBeginDisplayConfiguration(&config) == .success,
                   let cfg = config else { return false }
 
-            for item in origins {
+            for item in effective {
                 let result = CGConfigureDisplayOrigin(cfg, item.id, item.x, item.y)
                 guard result == .success else {
                     // The transaction has not been completed yet, so the config is
@@ -57,6 +75,9 @@ class ArrangementService {
     func setAsMainDisplay(_ targetID: CGDirectDisplayID) async -> Bool {
         guard CGDisplayIsOnline(targetID) != 0 else { return false }
         if CGDisplayIsMain(targetID) != 0 { return true }
+        // A mirroring display follows its source and has no origin of its own; writing
+        // one would silently remove it from the mirror set. It cannot be made main.
+        guard CGDisplayMirrorsDisplay(targetID) == kCGNullDirectDisplay else { return false }
 
         let targetBounds = CGDisplayBounds(targetID)
         let dx = -Int(targetBounds.origin.x)

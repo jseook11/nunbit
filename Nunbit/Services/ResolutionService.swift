@@ -7,25 +7,41 @@ final class ResolutionService: @unchecked Sendable {
     static let shared = ResolutionService()
     private init() {}
 
-    /// Persisted modeIDs keyed by displayID string. Used to re-apply modes after sleep/wake.
+    /// Persisted modeIDs keyed by the stable display UUID. Used to re-apply modes after
+    /// sleep/wake. Keyed by UUID rather than `CGDirectDisplayID`, which macOS can reassign.
     private var savedModeIDs: [String: Int32] = {
         (UserDefaults.standard.dictionary(forKey: "fd.ResolutionService.savedModes") as? [String: Int32]) ?? [:]
     }()
 
+    private static let savedModesKey = "fd.ResolutionService.savedModes"
+
     private func persistModeID(_ modeID: Int32, for displayID: CGDirectDisplayID) {
-        savedModeIDs["\(displayID)"] = modeID
-        UserDefaults.standard.set(savedModeIDs, forKey: "fd.ResolutionService.savedModes")
+        savedModeIDs[DisplayInfo.stableID(for: displayID)] = modeID
+        UserDefaults.standard.set(savedModeIDs, forKey: Self.savedModesKey)
     }
 
     private func clearSavedModeID(for displayID: CGDirectDisplayID) {
-        savedModeIDs.removeValue(forKey: "\(displayID)")
-        UserDefaults.standard.set(savedModeIDs, forKey: "fd.ResolutionService.savedModes")
+        savedModeIDs.removeValue(forKey: DisplayInfo.stableID(for: displayID))
+        UserDefaults.standard.set(savedModeIDs, forKey: Self.savedModesKey)
+    }
+
+    /// Reads the saved modeID for this display, migrating a legacy entry keyed by the
+    /// volatile `CGDirectDisplayID` on first read.
+    private func savedModeID(for displayID: CGDirectDisplayID) -> Int32? {
+        let stable = DisplayInfo.stableID(for: displayID)
+        if let value = savedModeIDs[stable] { return value }
+        let legacy = "\(displayID)"
+        guard let value = savedModeIDs[legacy] else { return nil }
+        savedModeIDs.removeValue(forKey: legacy)
+        savedModeIDs[stable] = value
+        UserDefaults.standard.set(savedModeIDs, forKey: Self.savedModesKey)
+        return value
     }
 
     /// Re-applies the last user-set mode for `displayID` if it differs from the current active mode.
     /// Called on wake from sleep so macOS mode resets are corrected.
     func reapplySavedModeIfNeeded(for displayID: CGDirectDisplayID) {
-        guard let savedID = savedModeIDs["\(displayID)"] else { return }
+        guard let savedID = savedModeID(for: displayID) else { return }
         let currentID = CGDisplayCopyDisplayMode(displayID)?.ioDisplayModeID
         guard currentID != savedID else { return }
 

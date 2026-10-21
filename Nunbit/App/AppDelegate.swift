@@ -5,9 +5,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, @unchecked Sendable {
     private var wakeObserver: NSObjectProtocol?
     private var screensWakeObserver: NSObjectProtocol?
 
-    /// Called by NunbitApp to provide access to the live DisplayManager instance.
-    var onWake: (() -> Void)?
-
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Prevent duplicate launches: if another instance is already running, exit immediately
         let runningApps = NSWorkspace.shared.runningApplications.filter {
@@ -22,12 +19,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, @unchecked Sendable {
         // Start intercepting brightness keys to route them to the display under the cursor.
         BrightnessKeyService.shared.start()
 
+        // Display-state recovery (displays, software brightness, gamma, saved mode) is
+        // owned by DisplayManager, which observes didWakeNotification itself. Wiring it
+        // up from here via a closure assigned by the SwiftUI menu content meant it never
+        // ran on a login launch where the menu was never opened.
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification,
             object: nil,
             queue: .main
-        ) { [weak self] _ in
-            self?.onWake?()
+        ) { _ in
             Task { @MainActor in
                 // WindowServer can drop virtual displays across a system wake.
                 await VirtualDisplayService.shared.reconcileActiveDisplays()

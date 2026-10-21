@@ -110,7 +110,7 @@ final class BrightnessService: @unchecked Sendable {
     private let softwareBrightnessLock = NSLock()
 
     private func softBrightnessKey(for displayID: CGDirectDisplayID) -> String {
-        "fd.softBrightness_\(displayID)"
+        PerDisplayStore.key("fd.softBrightness_", for: displayID)
     }
 
     private func saveSoftwareBrightness(factor: Double, for displayID: CGDirectDisplayID) {
@@ -130,12 +130,34 @@ final class BrightnessService: @unchecked Sendable {
 
     // MARK: - DDC Availability Cache
 
-    /// Tracks whether hardware DDC is available for each external display.
-    /// nil  = not yet determined
-    /// true = DDC write succeeded at least once
-    /// false = DDC write has failed; use software (gamma) fallback
-    private var ddcAvailable: [CGDirectDisplayID: Bool] = [:]
-    private let ddcAvailableLock = NSLock()
+    /// Per-display DDC health.
+    ///
+    /// Deliberately *not* a sticky Bool: one failed write (monitor asleep, input switch, a
+    /// fade that raced a sleep) must not pin a display to gamma dimming forever. Failures
+    /// are time-stamped, so the very next explicit adjustment retries hardware DDC while
+    /// still dimming immediately through the software fallback.
+    private struct DDCHealth {
+        /// A DDC read or write has succeeded at least once for this display.
+        var everSucceeded: Bool = false
+        /// Consecutive DDC write failures since the last success.
+        var consecutiveFailures: Int = 0
+        /// Timestamp of the most recent DDC write failure; nil when the last attempt
+        /// succeeded (or when none has been made yet).
+        var lastFailure: Date?
+
+        /// A display that has never answered DDC and keeps failing is treated as
+        /// software-only: we stop probing it on every animation step and on every refresh,
+        /// but an explicit adjustment still retries once per `ddcReprobeInterval` so a
+        /// monitor that appears later (input switch, wake) can still recover.
+        var isSoftwareOnly: Bool { !everSucceeded && consecutiveFailures >= 3 }
+    }
+
+    private var ddcHealth: [CGDirectDisplayID: DDCHealth] = [:]
+    private let ddcHealthLock = NSLock()
+
+    /// Bounded retry window for displays classified as software-only, and for re-probing
+    /// a display whose last DDC write failed.
+    private static let ddcReprobeInterval: TimeInterval = 20
 
     /// Per-display DDC max brightness value reported by the monitor.
     /// Used to denormalize 0–100% into the display's native DDC range.
@@ -158,12 +180,14 @@ final class BrightnessService: @unchecked Sendable {
                 display.brightness = b
             }
         } else {
-            // First check if DDC is already known to be unavailable; if so skip the
-            // async DDC call and just read the current gamma-derived brightness.
-            let knownUnavailable: Bool = ddcAvailableLock.withLock {
-                ddcAvailable[displayID] == false
+            // Skip the async DDC probe only while a failure is still fresh. After
+            // `ddcReprobeInterval` we probe again, so a monitor that comes back (input
+            // switch, wake) is re-detected instead of being stuck in software mode.
+            let skipProbe: Bool = ddcHealthLock.withLock {
+                guard let lastFailure = ddcHealth[displayID]?.lastFailure else { return false }
+                return Date().timeIntervalSince(lastFailure) < Self.ddcReprobeInterval
             }
-            if knownUnavailable {
+            if skipProbe {
                 // Can't read brightness from gamma tables meaningfully; leave value as-is
                 return
             }
@@ -178,10 +202,11 @@ final class BrightnessService: @unchecked Sendable {
                     guard let self else { return }
                     if let result = result, result.max > 0 {
                         let brightness = Double(result.current) / Double(result.max) * 100.0
-                        self.ddcAvailableLock.withLock {
-                            self.ddcAvailable[displayID] = true
+                        self.ddcHealthLock.withLock {
                             self.ddcMaxBrightness[displayID] = result.max
                         }
+                        // A usable Get VCP reply proves the DDC channel is alive again.
+                        self.recordDDCSuccess(for: displayID)
                         display.brightness = brightness
                     } else {
                         // No usable Get VCP reply. Some monitors accept Set VCP (so
@@ -219,46 +244,20 @@ final class BrightnessService: @unchecked Sendable {
                 self?.setInternalBrightness(value)
             }
         } else {
-            // Check current DDC availability status
-            let currentStatus: Bool? = ddcAvailableLock.withLock { ddcAvailable[displayID] }
+            let attemptDDC = shouldAttemptDDC(for: displayID)
 
-            if currentStatus == false {
-                // DDC known unavailable — go straight to software fallback
-                queue.async { [weak self] in
-                    self?.setSoftwareBrightness(clamped, for: displayID)
-                }
-                return
+            // If the previous DDC attempt failed, dim through gamma synchronously so the
+            // change is visible immediately even though the retry below is asynchronous.
+            if lastDDCAttemptFailed(for: displayID) || !attemptDDC {
+                setSoftwareBrightness(clamped, for: displayID)
             }
 
-            // Denormalize percentage to display's native DDC range.
-            // If max is unknown, default to 100 (safe for most monitors).
-            let knownMax: UInt16 = ddcAvailableLock.withLock {
-                ddcMaxBrightness[displayID] ?? 100
-            }
-            let ddcValue = UInt16((clamped / 100.0) * Double(knownMax))
+            // A display classified as software-only is still retried occasionally, but not
+            // on every single change: a failing I2C write must not stall each drag.
+            guard attemptDDC else { return }
 
-            // Attempt DDC write; if it fails, fall back to gamma table dimming
-            DDCService.shared.writeAsync(
-                displayID: displayID,
-                command: DDCService.brightnessVCP,
-                value: ddcValue
-            ) { [weak self] success in
-                // DDCService calls this back on its own queue; hop to the main actor
-                // before touching MainActor-isolated state.
-                Task { @MainActor [weak self] in
-                    guard let self else { return }
-                    if success {
-                        self.ddcAvailableLock.withLock { self.ddcAvailable[displayID] = true }
-                    } else {
-                        self.ddcAvailableLock.withLock { self.ddcAvailable[displayID] = false }
-                        // Apply gamma-based software brightness as fallback.
-                        self.setSoftwareBrightness(clamped, for: displayID)
-                        #if DEBUG
-                        print("[BrightnessService] DDC unavailable for display \(displayID), using software fallback")
-                        #endif
-                    }
-                }
-            }
+            // Attempt the hardware write; on failure it falls back to gamma dimming.
+            writeDDCBrightness(clamped, for: displayID)
         }
     }
 
@@ -301,48 +300,32 @@ final class BrightnessService: @unchecked Sendable {
                 self.queue.async { self.setInternalBrightness(floatVal) }
             }
         } else {
-            let currentStatus: Bool? = ddcAvailableLock.withLock { ddcAvailable[displayID] }
+            let attemptDDC = shouldAttemptDDC(for: displayID)
 
-            if currentStatus == false {
-                // Software (gamma) path: 8 steps over 200ms
-                anim.animate(from: fromBrightness, to: clamped, steps: 8, duration: 0.20) { [weak display] value, _ in
+            if lastDDCAttemptFailed(for: displayID) || !attemptDDC {
+                // Software (gamma) path: 8 steps over 200ms. Used while the last DDC
+                // attempt is failing, so the drag always has an immediate visible effect.
+                anim.animate(from: fromBrightness, to: clamped, steps: 8, duration: 0.20) { [weak self, weak display] value, isLast in
+                    guard let self else { return }
                     display?.brightness = value
-                    BrightnessService.shared.setSoftwareBrightness(value, for: displayID)
+                    self.setSoftwareBrightness(value, for: displayID)
+                    if isLast && attemptDDC {
+                        // Retry hardware DDC once the drag settles: a transient failure
+                        // (sleep, input switch) must not pin this display to software
+                        // dimming. On success the software factor is cleared.
+                        self.writeDDCBrightness(clamped, for: displayID)
+                    }
                 }
             } else {
                 // DDC path: 5 steps over 200ms.
                 // DDC I2C is slow (~40-50ms per command), so 5 steps at 40ms intervals
                 // keeps the bus from overloading while giving smooth visible steps.
-                let knownMax: UInt16 = ddcAvailableLock.withLock {
-                    ddcMaxBrightness[displayID] ?? 100
-                }
                 anim.animate(from: fromBrightness, to: clamped, steps: 5, duration: 0.20) { [weak self, weak display] value, isLast in
                     guard let self else { return }
                     display?.brightness = value
-                    let ddcValue = UInt16((value / 100.0) * Double(knownMax))
-                    // Only send DDC on intermediate steps and the final step.
-                    // If DDC fails on the final step, fall through to software.
-                    DDCService.shared.writeAsync(
-                        displayID: displayID,
-                        command: DDCService.brightnessVCP,
-                        value: ddcValue
-                    ) { [weak self] success in
-                        // DDCService calls this back on its own queue; hop to the main actor
-                        // before touching MainActor-isolated state.
-                        Task { @MainActor [weak self] in
-                            guard let self else { return }
-                            if success {
-                                self.ddcAvailableLock.withLock { self.ddcAvailable[displayID] = true }
-                            } else if isLast {
-                                // DDC failed — mark unavailable and apply software fallback
-                                self.ddcAvailableLock.withLock { self.ddcAvailable[displayID] = false }
-                                self.setSoftwareBrightness(clamped, for: displayID)
-                                #if DEBUG
-                                print("[BrightnessService] smooth DDC failed for \(displayID), using software fallback")
-                                #endif
-                            }
-                        }
-                    }
+                    // Only fall back to software dimming on the final step, so one dropped
+                    // intermediate command does not dim the screen mid-drag.
+                    self.writeDDCBrightness(value, for: displayID, applySoftwareFallback: isLast)
                 }
             }
         }
@@ -358,8 +341,15 @@ final class BrightnessService: @unchecked Sendable {
     /// so the two do not overwrite each other's CGSetDisplayTransfer* call.
     func setSoftwareBrightness(_ brightness: Double, for displayID: CGDirectDisplayID) {
         let factor = max(0.05, brightness / 100.0)
-        softwareBrightnessLock.withLock { softwareBrightnessFactors[displayID] = factor }
-        saveSoftwareBrightness(factor: factor, for: displayID)
+        if factor >= 1.0 {
+            // No dimming needed: never persist a no-op factor, otherwise it could outlive
+            // the DDC failure that created it and be resurrected after a restart.
+            softwareBrightnessLock.withLock { _ = softwareBrightnessFactors.removeValue(forKey: displayID) }
+            UserDefaults.standard.removeObject(forKey: softBrightnessKey(for: displayID))
+        } else {
+            softwareBrightnessLock.withLock { softwareBrightnessFactors[displayID] = factor }
+            saveSoftwareBrightness(factor: factor, for: displayID)
+        }
 
         // If GammaService has an active adjustment, let it re-apply (it will incorporate the factor).
         if GammaService.shared.hasActiveAdjustment(for: displayID) {
@@ -391,7 +381,8 @@ final class BrightnessService: @unchecked Sendable {
         #endif
     }
 
-    /// Resets the gamma table for a display back to the identity curve.
+    /// Writes a plain identity gamma ramp for a display, removing any software dimming.
+    /// Used by `clearSoftwareBrightness` when no colour adjustment is active.
     func resetSoftwareBrightness(for displayID: CGDirectDisplayID) {
         let size = 256
         let values = (0..<size).map { CGGammaValue($0) / CGGammaValue(size - 1) }
@@ -401,17 +392,43 @@ final class BrightnessService: @unchecked Sendable {
         CGSetDisplayTransferByTable(displayID, UInt32(size), &red, &green, &blue)
     }
 
-    /// Returns whether DDC is available for the given display.
-    /// nil means not yet determined (first use).
-    func isDDCAvailable(for displayID: CGDirectDisplayID) -> Bool? {
-        ddcAvailableLock.withLock { ddcAvailable[displayID] }
+    /// Drops the software-brightness factor for a display and makes the screen reflect it.
+    ///
+    /// Called when a hardware DDC write succeeds again. Without this, one transient DDC
+    /// failure leaves the panel permanently darker than the slider claims, because the DDC
+    /// path never removed the gamma dimming. No-op when no factor is stored anywhere.
+    func clearSoftwareBrightness(for displayID: CGDirectDisplayID) {
+        let hadInMemory = softwareBrightnessLock.withLock {
+            softwareBrightnessFactors.removeValue(forKey: displayID) != nil
+        }
+        let hadPersisted = UserDefaults.standard.object(forKey: softBrightnessKey(for: displayID)) != nil
+        guard hadInMemory || hadPersisted else { return }
+        UserDefaults.standard.removeObject(forKey: softBrightnessKey(for: displayID))
+
+        // Re-apply the transfer function without the brightness factor: let GammaService own
+        // the write when a colour adjustment is active, otherwise write an identity ramp.
+        if GammaService.shared.hasActiveAdjustment(for: displayID) {
+            GammaService.shared.reapply(for: displayID)
+        } else {
+            resetSoftwareBrightness(for: displayID)
+        }
     }
 
-    /// Clears DDC availability and max brightness cache for a disconnected display.
+    /// Returns whether DDC is available for the given display.
+    /// nil means not yet determined (first use); false means the most recent DDC attempt
+    /// failed, so the display is currently driven by the software fallback.
+    func isDDCAvailable(for displayID: CGDirectDisplayID) -> Bool? {
+        ddcHealthLock.withLock {
+            guard let health = ddcHealth[displayID] else { return nil }
+            return health.lastFailure == nil
+        }
+    }
+
+    /// Clears DDC health and max brightness cache for a disconnected display.
     /// Call this when a display is removed so stale state cannot pollute a reconnect.
     func invalidateDDCState(for displayID: CGDirectDisplayID) {
-        ddcAvailableLock.withLock {
-            ddcAvailable.removeValue(forKey: displayID)
+        ddcHealthLock.withLock {
+            ddcHealth.removeValue(forKey: displayID)
             ddcMaxBrightness.removeValue(forKey: displayID)
         }
     }
@@ -419,6 +436,9 @@ final class BrightnessService: @unchecked Sendable {
     /// Re-applies the software brightness for a display after wake from sleep or hot-plug.
     /// Checks in-memory factor first; falls back to UserDefaults so restart is handled too.
     /// No-op if no saved factor < 1.0 exists.
+    ///
+    /// `clearSoftwareBrightness` removes both the in-memory and the persisted entry, so a
+    /// factor cleared when DDC recovered cannot be resurrected here.
     func reapplySoftwareBrightnessIfNeeded(for display: DisplayInfo) {
         let displayID = display.displayID
         let inMemory = softwareBrightnessLock.withLock { softwareBrightnessFactors[displayID] }
@@ -429,6 +449,89 @@ final class BrightnessService: @unchecked Sendable {
             softwareBrightnessLock.withLock { softwareBrightnessFactors[displayID] = f }
         }
         setSoftwareBrightness(f * 100.0, for: displayID)
+    }
+
+    // MARK: - DDC Health Bookkeeping
+
+    /// Records that a DDC read or write succeeded for a display.
+    private func recordDDCSuccess(for displayID: CGDirectDisplayID) {
+        ddcHealthLock.withLock {
+            var health = ddcHealth[displayID] ?? DDCHealth()
+            health.everSucceeded = true
+            health.consecutiveFailures = 0
+            health.lastFailure = nil
+            ddcHealth[displayID] = health
+        }
+    }
+
+    /// Records a DDC write failure. The failure is time-stamped rather than latched, so the
+    /// next explicit adjustment retries hardware DDC instead of falling back forever.
+    private func recordDDCFailure(for displayID: CGDirectDisplayID) {
+        ddcHealthLock.withLock {
+            var health = ddcHealth[displayID] ?? DDCHealth()
+            health.consecutiveFailures += 1
+            health.lastFailure = Date()
+            ddcHealth[displayID] = health
+        }
+    }
+
+    /// True when the most recent DDC attempt for this display failed, i.e. the display is
+    /// currently being dimmed in software.
+    private func lastDDCAttemptFailed(for displayID: CGDirectDisplayID) -> Bool {
+        ddcHealthLock.withLock { ddcHealth[displayID]?.lastFailure != nil }
+    }
+
+    /// Whether an explicit user adjustment should attempt a hardware DDC write now.
+    /// Always true until a display has repeatedly failed without ever succeeding; such a
+    /// display is retried at most once per `ddcReprobeInterval`, so a failing I2C write does
+    /// not stall every drag while a late-appearing monitor can still recover.
+    private func shouldAttemptDDC(for displayID: CGDirectDisplayID) -> Bool {
+        ddcHealthLock.withLock {
+            guard let health = ddcHealth[displayID], health.isSoftwareOnly else { return true }
+            guard let lastFailure = health.lastFailure else { return true }
+            return Date().timeIntervalSince(lastFailure) >= Self.ddcReprobeInterval
+        }
+    }
+
+    /// Sends one hardware DDC brightness write and updates the per-display DDC health.
+    ///
+    /// On success the software-brightness factor is cleared, so a display that recovers from
+    /// a transient DDC failure stops being dimmed twice.
+    /// On failure the failure is recorded and, when `applySoftwareFallback` is true, the
+    /// gamma fallback is applied so the slider still has a visible effect.
+    private func writeDDCBrightness(
+        _ brightness: Double,
+        for displayID: CGDirectDisplayID,
+        applySoftwareFallback: Bool = true
+    ) {
+        // Denormalize percentage to the display's native DDC range.
+        // If max is unknown, default to 100 (safe for most monitors).
+        let knownMax: UInt16 = ddcHealthLock.withLock { ddcMaxBrightness[displayID] ?? 100 }
+        let ddcValue = UInt16((brightness / 100.0) * Double(knownMax))
+
+        DDCService.shared.writeAsync(
+            displayID: displayID,
+            command: DDCService.brightnessVCP,
+            value: ddcValue
+        ) { [weak self] success in
+            // DDCService calls this back on its own queue; hop to the main actor
+            // before touching MainActor-isolated state.
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if success {
+                    self.recordDDCSuccess(for: displayID)
+                    self.clearSoftwareBrightness(for: displayID)
+                } else {
+                    self.recordDDCFailure(for: displayID)
+                    if applySoftwareFallback {
+                        self.setSoftwareBrightness(brightness, for: displayID)
+                        #if DEBUG
+                        print("[BrightnessService] DDC write failed for display \(displayID), using software fallback")
+                        #endif
+                    }
+                }
+            }
+        }
     }
 
     // MARK: - Internal Display (IODisplayGetFloatParameter)
