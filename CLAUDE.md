@@ -99,7 +99,14 @@ Tech stack: Swift 6 + SwiftUI (MenuBarExtra) + IOKit + CoreGraphics, zero third-
 
 > **Private framework dynamic loading:**
 - ❌ Referencing private framework symbols with `@_silgen_name` (undefined symbol at link time)
-- ✅ Runtime loading with `dlopen` + `dlsym` (e.g. CoreDisplay_Display_GetUserBrightness)
+- ✅ Runtime loading with `dlopen` + `dlsym` (e.g. CoreDisplay_Display_GetUserBrightness, DisplayServicesGet/SetBrightness)
+
+> **Built-in display brightness (mandatory):**
+- On macOS 26 the IOKit path is dead: `CGDisplayIOServicePort` returns 0 and `IOServiceMatching("IODisplayConnect")` yields **zero** services, so `IODisplayGet/SetFloatParameter` cannot reach the internal panel at all
+- ✅ Primary: `DisplayServicesBrightness` (`Nunbit/Services/DisplayServicesBrightness.swift`) → private DisplayServices via `dlopen`/`dlsym`
+- ✅ Fallbacks, in order: CoreDisplay `CoreDisplay_Display_GetUserBrightness` (read), then IOKit — keep them for macOS 14/15 and for the Intel/external-display cases
+- `CoreDisplay_Display_GetUserBrightness` can return a stale `1.0` on macOS 26; never treat it as authoritative when DisplayServices answers
+- ❌ Do not route built-in brightness through DDC or through the gamma fallback when DisplayServices succeeds — gamma dimming does not change the backlight
 
 > **Stop and ask the user:**
 - Needing to use a private API (CoreDisplay, etc.)
@@ -131,6 +138,16 @@ grep -r "DisplayInfo\|DisplayManager\|DDCService" Nunbit/ --include="*.swift" | 
 > The signing flags are required: `project.yml` pins `DEVELOPMENT_TEAM: 29W56PHWJR`, which does not
 > match every local signing identity, so a plain `xcodebuild` fails with
 > `No signing certificate "Mac Development" found`. See `docs/BLOCKING.md` B-005.
+
+> **No Xcode installed?** `xcodebuild`/`xcodegen` need full Xcode, which is not present on this
+> machine. Use the Command Line Tools path instead — it compiles every source file with `swiftc`,
+> assembles the bundle, ad-hoc signs it, and optionally installs/launches:
+> ```bash
+> ./scripts/build-local.sh --run          # build + install to /Applications + launch
+> ./scripts/build-local.sh --debug --run  # -Onone -DDEBUG to see print() diagnostics
+> ```
+> Ad-hoc signing means TCC grants (Accessibility for the brightness keys) may need re-approval after
+> each rebuild. Details: `docs/BLOCKING.md` B-005.
 
 ## Common Operations Playbook
 
@@ -178,4 +195,5 @@ grep -r "DisplayInfo\|DisplayManager\|DDCService" Nunbit/ --include="*.swift" | 
 | IOKit | DDC/CI I2C communication, brightness/contrast | 2 |
 | ColorSync | ICC Profile management | 5 |
 | CoreGraphics (CGVirtualDisplay) | Virtual display | 10 |
-| CoreDisplay (dlsym) | Built-in display brightness reading | 22 |
+| DisplayServices (dlsym) | Built-in display brightness read/write | 22 |
+| CoreDisplay (dlsym) | Built-in display brightness reading (fallback) | 22 |

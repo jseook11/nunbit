@@ -24,6 +24,18 @@
 - **Cause**: `project.yml` pins `DEVELOPMENT_TEAM: 29W56PHWJR`, but the local identity is `Apple Development: basut@pm.me (YCS9G8TFJ8)` with OU `GBB276UY2D`.
 - **Workaround**: add `CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO` (already documented in `docs/PERSONAL-FORK.md`).
 - **Proper fix**: make the team configurable for forks (e.g. drop the pinned `DEVELOPMENT_TEAM` from `project.yml` and set it via an xcconfig that is git-ignored, or document the override in CLAUDE.md's Verification Chain so nobody is misled by a green-looking `tail -5`).
+- **Update (2026-10-21) — full Xcode is not installed on this machine at all**, only Command Line Tools (`xcode-select -p` → `/Library/Developer/CommandLineTools`), so `xcodebuild` aborts with *requires Xcode* and `xcodegen` is absent. The app was built and installed with `swiftc` directly:
+  ```bash
+  SDK=$(xcrun --show-sdk-path)
+  swiftc -swift-version 6 -strict-concurrency=minimal -O \
+    -target arm64-apple-macos14.0 -sdk "$SDK" \
+    -import-objc-header Nunbit/Nunbit-Bridging-Header.h \
+    -parse-as-library -module-name Nunbit \
+    -o build/Nunbit.app/Contents/MacOS/Nunbit $(find Nunbit -name '*.swift')
+  codesign --force --sign - --entitlements Nunbit/Nunbit.entitlements \
+    --identifier com.jseook11.nunbit build/Nunbit.app
+  ```
+  A hand-written `Contents/Info.plist` (LSUIElement, bundle id, version) and an `iconutil`-generated `AppIcon.icns` complete the bundle. The asset catalog is not needed at runtime (all icons are SF Symbols). The resulting signature is **ad-hoc**, so TCC grants (Accessibility for the brightness keys) may need re-approval after every rebuild, and Launch at Login via `SMAppService` may refuse to register. Installing full Xcode restores the documented verification chain.
 - **Added on**: 2026-10-21
 
 ---

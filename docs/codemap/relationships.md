@@ -37,7 +37,9 @@ App (NunbitApp)
 
 ```
 BrightnessService ──────────→ DDCService (external display DDC brightness read/write)
-AutoBrightnessService ──────→ BrightnessService (called after mapping lux→brightness)
+                  ──────────→ DisplayServicesBrightness (built-in panel get/set; IOKit fallback)
+AutoBrightnessService ──────→ DisplayServicesBrightness (reads built-in panel brightness)
+                      ──────→ BrightnessService (mirrors the reading to external displays)
 DisplayManager ─────────────→ BrightnessService (async brightness init on refresh)
                ─────────────→ ArrangementService (setAsMainDisplay)
                ─────────────→ arrangeExternalAboveBuiltin() (auto positioning after hot-plug)

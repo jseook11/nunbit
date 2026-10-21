@@ -538,21 +538,23 @@ final class BrightnessService: @unchecked Sendable {
 
     private static nonisolated(unsafe) let ioDisplayBrightnessKey = "brightness" as CFString
 
-    /// Returns the io_service_t for the built-in display using CGDisplayIOServicePort.
-    /// Falls back to iterating IODisplayConnect services if CGDisplayIOServicePort returns null.
-    /// Caller does NOT need to release — CGDisplayIOServicePort returns a non-retained port.
-    private func builtinIOService() -> io_service_t? {
-        // Find the built-in CGDirectDisplayID
+    /// The CGDirectDisplayID of the built-in display, if one is online.
+    private func builtinDisplayID() -> CGDirectDisplayID? {
         var displayCount: UInt32 = 0
         CGGetOnlineDisplayList(0, nil, &displayCount)
         var displayIDs = [CGDirectDisplayID](repeating: 0, count: Int(displayCount))
         CGGetOnlineDisplayList(displayCount, &displayIDs, &displayCount)
 
-        guard let builtinID = (0..<Int(displayCount))
+        return (0..<Int(displayCount))
             .map({ displayIDs[$0] })
-            .first(where: { CGDisplayIsBuiltin($0) != 0 }) else {
-            return nil
-        }
+            .first(where: { CGDisplayIsBuiltin($0) != 0 })
+    }
+
+    /// Returns the io_service_t for the built-in display using CGDisplayIOServicePort.
+    /// Falls back to iterating IODisplayConnect services if CGDisplayIOServicePort returns null.
+    /// Caller does NOT need to release — CGDisplayIOServicePort returns a non-retained port.
+    private func builtinIOService() -> io_service_t? {
+        guard let builtinID = builtinDisplayID() else { return nil }
 
         // CGDisplayIOServicePort returns a non-retained service port (do not release)
         let servicePort = CGDisplayIOServicePort(builtinID)
@@ -564,7 +566,15 @@ final class BrightnessService: @unchecked Sendable {
     }
 
     private func getInternalBrightness() -> Double? {
-        // Primary: use CGDisplayIOServicePort to get the specific builtin display service
+        // Primary: DisplayServices. On macOS 26 CGDisplayIOServicePort returns 0 and there
+        // are no IODisplayConnect services at all, so the IOKit paths below never reach
+        // the panel; DisplayServices is the only working read on Apple Silicon.
+        if let builtinID = builtinDisplayID(),
+           let value = DisplayServicesBrightness.get(builtinID) {
+            return Double(value) * 100.0
+        }
+
+        // Fallback: use CGDisplayIOServicePort to get the specific builtin display service
         if let servicePort = builtinIOService() {
             var value: Float = 0
             if IODisplayGetFloatParameter(
@@ -617,7 +627,16 @@ final class BrightnessService: @unchecked Sendable {
     }
 
     private func setInternalBrightness(_ value: Float) {
-        // Primary: use CGDisplayIOServicePort to target only the builtin display service
+        // Primary: DisplayServices — see getInternalBrightness() for why IOKit is dead here.
+        if let builtinID = builtinDisplayID(),
+           DisplayServicesBrightness.set(value, for: builtinID) {
+            #if DEBUG
+            print("[BrightnessService] internal brightness set to \(value) via DisplayServices")
+            #endif
+            return
+        }
+
+        // Fallback: use CGDisplayIOServicePort to target only the builtin display service
         if let servicePort = builtinIOService() {
             if IODisplaySetFloatParameter(
                 servicePort, 0, Self.ioDisplayBrightnessKey, value

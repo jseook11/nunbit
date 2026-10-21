@@ -6,7 +6,7 @@
 
 | Topic | File | Entries |
 |------|------|------|
-| IOKit / DDC / Rotation / Ambient Light / Display Matching / Apple Silicon | [iokit.md](iokit.md) | L-003 ~ L-005, L-033 + general entries |
+| IOKit / DDC / Rotation / Built-in Brightness / Display Matching / Apple Silicon | [iokit.md](iokit.md) | L-003 ~ L-005, L-033, L-039 + general entries |
 | CoreGraphics / HiDPI / CGVirtualDisplay | [coregraphics.md](coregraphics.md) | L-006, L-007, L-020 ~ L-031, L-034, L-036, L-037 + general entries |
 | SwiftUI / MenuBarExtra / UI Animation / DDC Cache / Performance | [swiftui.md](swiftui.md) | general entries |
 | Cross-Service Collaboration / Concurrency / Resource Management | [services.md](services.md) | L-008 ~ L-019, L-032, L-035, L-038 |

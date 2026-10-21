@@ -67,7 +67,13 @@ final class AutoBrightnessService: ObservableObject, @unchecked Sendable {
             return nil
         }
 
-        // Try CoreDisplay private API first.
+        // DisplayServices first: on macOS 26 CoreDisplay_Display_GetUserBrightness has been
+        // observed returning a stale 1.0 while DisplayServices reports the real panel value.
+        if let value = DisplayServicesBrightness.get(builtinID) {
+            return Double(value)
+        }
+
+        // Fallback: CoreDisplay private API.
         let value = _CoreDisplay_GetBrightness?(builtinID) ?? 0
         if value > 0 {
             return min(1.0, max(0.0, value))

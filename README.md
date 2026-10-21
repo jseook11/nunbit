@@ -77,7 +77,8 @@ No internet connection required (except optional update checks via GitHub Releas
 - **CoreGraphics** — Display enumeration, resolution, arrangement
 - **ColorSync** — ICC color profile management
 - **CGVirtualDisplay** — Virtual display creation (private API, macOS 14+)
-- **CoreDisplay** — Built-in display brightness reading (private API, via dlopen)
+- **DisplayServices** — Built-in display hardware brightness read/write (private API, via dlopen)
+- **CoreDisplay** — Built-in display brightness reading fallback (private API, via dlopen)
 - Zero third-party dependencies
 
 ---
@@ -99,9 +100,9 @@ Nunbit/
 Nunbit sits in your menu bar and talks directly to your displays:
 
 - **External monitors**: Uses DDC/CI protocol over I2C (Intel) or IOAVService (Apple Silicon) to control hardware brightness, contrast, and other settings
-- **Built-in display**: Uses CoreGraphics gamma tables for software brightness adjustment
+- **Built-in display**: Uses the private DisplayServices API for real backlight brightness (IOKit `IODisplay*FloatParameter` fallback), with CoreGraphics gamma tables for software dimming when hardware control is unavailable
 - **Brightness keys**: Installs a CGEventTap to intercept keyboard brightness keys and route them to the display under your mouse cursor
-- **Auto brightness**: Polls the built-in display brightness via CoreDisplay private API and proportionally adjusts external displays
+- **Auto brightness**: Polls the built-in display brightness via the DisplayServices private API (CoreDisplay/IOKit fallback) and proportionally adjusts external displays
 - **HiDPI**: Creates virtual displays via CGVirtualDisplay private API, or writes display override plists for persistent HiDPI
 
 ---

@@ -28,6 +28,15 @@
 - After creating a new Swift file, if other files reference types in the new file, you must first run `xcodegen generate` to regenerate the xcodeproj, otherwise "cannot find in scope"
 - When accessing properties of another `@MainActor` class inside the `init` of a `@MainActor` class, the `init` must also be marked `@MainActor`, otherwise Swift 6 strict concurrency reports an error
 
+## IOKit / Built-in Brightness
+
+### L-039: The built-in brightness IOKit path is dead on macOS 26
+- **Symptom**: The brightness slider for the MacBook panel moves, but the screen never changes.
+- **Cause**: Measured on macOS 26 (Darwin 25.5): `CGDisplayIOServicePort(builtinID)` returns `0`, and `IOServiceMatching("IODisplayConnect")` yields **zero** services. `IODisplayGet/SetFloatParameter` therefore never reaches the internal panel, and the whole fallback loop is a no-op. `CoreDisplay_Display_GetUserBrightness` also returned a constant `1.0` while the real panel was at `0.80`.
+- **Fix**: Use the private DisplayServices framework via `dlopen`/`dlsym`: `DisplayServicesGetBrightness` / `DisplayServicesSetBrightness` / `DisplayServicesCanChangeBrightness`. Verified `rc=0` on get and set, with the readback matching the requested value. Keep the IOKit and CoreDisplay paths as fallbacks for macOS 14/15 and Intel.
+- **Lesson**: An API that still links is not an API that still works. Probe the real data path per OS version, and prefer `nil` over a plausible constant — the stale `1.0` quietly fed the wrong value into Auto Brightness.
+- **Date**: 2026-10-21
+
 ## IOKit Display Matching (Phase 13-15)
 
 ### L-003: vendor+model IOKit matching is unreliable

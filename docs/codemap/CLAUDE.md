@@ -47,7 +47,7 @@ Details: [file-tree.md](file-tree.md) | [relationships.md](relationships.md)
 | Add a DDC VCP feature (e.g. volume control) | `Services/DDCService.swift` (add the VCP constant) → create a new Service → create a new View → `Views/DisplayDetailView.swift` (add a Section) → `docs/codemap/CLAUDE.md` |
 | Add a menu bar tool entry (not display-related) | `Views/MenuBarView.swift` (add the entry in the tools area) → create a new View/Service → `docs/codemap/CLAUDE.md` |
 | Modify resolution switching logic | `Services/ResolutionService.swift`, `Models/DisplayMode.swift`; test the impact on `Views/ResolutionSliderView.swift` and `Views/DisplayModeListView.swift` |
-| Modify brightness read/write | `Services/BrightnessService.swift`; for external displays also check `Services/DDCService.swift` |
+| Modify brightness read/write | `Services/BrightnessService.swift`; built-in panel hardware calls go through `Services/DisplayServicesBrightness.swift`; for external displays also check `Services/DDCService.swift` |
 | Modify image adjustment effects | `Services/GammaService.swift` (formula/Table calculation), `Views/ImageAdjustmentView.swift` (UI slider mapping) |
 | Add a new persisted setting | `Services/SettingsService.swift` (Keys + @Published property + loadAll/persist) → related View |
 | Modify notification/hot-plug handling | `Services/DisplayManager.swift` (displayReconfigCallback + refreshDisplays) |
