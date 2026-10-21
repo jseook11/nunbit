@@ -109,7 +109,10 @@ struct ColorProfileView: View {
         let displayID = display.displayID
         let svc = ColorProfileService.shared
         let loaded = await svc.enumerateProfiles()
-        let currentURL = svc.currentProfileURL(for: displayID)
+        // ColorSyncDeviceCopyDeviceInfo is IPC — do not run it on the main actor.
+        let currentURL = await Task.detached(priority: .userInitiated) {
+            svc.currentProfileURL(for: displayID)
+        }.value
         profiles = loaded
         selectedPath = currentURL
         isLoading = false

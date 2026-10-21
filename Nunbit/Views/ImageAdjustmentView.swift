@@ -1,52 +1,72 @@
 import SwiftUI
+import Observation
 
-/// Expandable "Image Adjustment" section — 11 sliders for software gamma/image adjustments.
+/// Expandable "Image Adjustment" section — 13 controls for software gamma/image adjustments.
 /// Mirrors BetterDisplay's Image Adjustment panel.
+///
+/// Performance notes (why this file looks the way it does):
+/// - The model is `@Observable`, not 13 `@State` properties on the container. Each row
+///   reads only its own key path, so dragging one slider re-renders that row instead of
+///   rebuilding all 13 rows and the whole MenuBarExtra `ScrollView`.
+/// - Saved state is loaded in `init`, before the first render. Loading it in `onAppear`
+///   forced a second full-body evaluation on every open.
+/// - Nothing here writes display hardware when the view appears. Launch and every display
+///   configuration change are already covered by
+///   `DisplayManager.scheduleDisplayStateRestore` → `GammaService`; doing it again inside
+///   the expansion animation was the cause of the visible stutter.
 struct ImageAdjustmentView: View {
-    @ObservedObject var display: DisplayInfo
+    /// Plain reference, not `@ObservedObject`: this view only needs the immutable display
+    /// ID. Observing DisplayInfo rebuilt the whole panel whenever the brightness poll
+    /// changed `display.brightness` (twice a second while the menu was open).
+    let display: DisplayInfo
 
-    // MARK: - Local adjustment state (mirrors GammaAdjustment)
-    @State private var contrast: Double = 0           // -100 … +100
-    @State private var gammaVal: Double = 0           // -100 … +100
-    @State private var gain: Double = 0               // -100 … +100
-    @State private var colorTemperature: Double = 0   // -100 … +100
-    @State private var quantLevels: Double = 256      // 2 … 256 (256 = ∞)
-    @State private var rGamma: Double = 0
-    @State private var gGamma: Double = 0
-    @State private var bGamma: Double = 0
-    @State private var rGain: Double = 0
-    @State private var gGain: Double = 0
-    @State private var bGain: Double = 0
-    @State private var isInverted: Bool = false
-    @State private var isPaused: Bool = false
+    @State private var model: ImageAdjustmentModel
+
+    init(display: DisplayInfo) {
+        self.display = display
+        // Cheap UserDefaults read, done before the first render.
+        _model = State(initialValue: ImageAdjustmentModel(
+            saved: GammaService.shared.loadSavedState(for: display.displayID)
+        ))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
 
             // ── Group 1: Global adjustments ────────────────────────────────
-            adjustRow(icon: "circle.righthalf.filled",   label: "Contrast",  value: $contrast).help("Adjust contrast")
-            adjustRow(icon: "sparkle",                   label: "Gamma",  value: $gammaVal).help("Adjust gamma")
-            adjustRow(icon: "bolt.fill",                 label: "Gain",    value: $gain).help("Adjust gain")
-            adjustRow(icon: "thermometer.medium",        label: "Color Temperature",    value: $colorTemperature).help("Adjust color temperature")
-            quantizationRow
+            adjustRow(icon: "circle.righthalf.filled", label: "Contrast",         keyPath: \.contrast)
+                .help("Adjust contrast")
+            adjustRow(icon: "sparkle",                 label: "Gamma",            keyPath: \.gammaVal)
+                .help("Adjust gamma")
+            adjustRow(icon: "bolt.fill",               label: "Gain",             keyPath: \.gain)
+                .help("Adjust gain")
+            adjustRow(icon: "thermometer.medium",      label: "Color Temperature", keyPath: \.colorTemperature)
+                .help("Adjust color temperature")
+            QuantizationRow(model: model, commitAction: commitAdjustment)
 
             Divider()
                 .padding(.horizontal, 12)
                 .padding(.vertical, 2)
 
             // ── Group 2: Per-channel gamma ─────────────────────────────────
-            adjustRow(icon: "r.circle",      label: "Gamma R",  value: $rGamma, accent: .red).help("Adjust red gamma")
-            adjustRow(icon: "g.circle",      label: "Gamma G",  value: $gGamma, accent: .green).help("Adjust green gamma")
-            adjustRow(icon: "b.circle",      label: "Gamma B",  value: $bGamma, accent: .blue).help("Adjust blue gamma")
+            adjustRow(icon: "r.circle", label: "Gamma R", keyPath: \.rGamma, accent: .red)
+                .help("Adjust red gamma")
+            adjustRow(icon: "g.circle", label: "Gamma G", keyPath: \.gGamma, accent: .green)
+                .help("Adjust green gamma")
+            adjustRow(icon: "b.circle", label: "Gamma B", keyPath: \.bGamma, accent: .blue)
+                .help("Adjust blue gamma")
 
             Divider()
                 .padding(.horizontal, 12)
                 .padding(.vertical, 2)
 
             // ── Group 3: Per-channel gain ──────────────────────────────────
-            adjustRow(icon: "r.circle.fill", label: "Gain R",    value: $rGain,  accent: .red).help("Adjust red gain")
-            adjustRow(icon: "g.circle.fill", label: "Gain G",    value: $gGain,  accent: .green).help("Adjust green gain")
-            adjustRow(icon: "b.circle.fill", label: "Gain B",    value: $bGain,  accent: .blue).help("Adjust blue gain")
+            adjustRow(icon: "r.circle.fill", label: "Gain R", keyPath: \.rGain, accent: .red)
+                .help("Adjust red gain")
+            adjustRow(icon: "g.circle.fill", label: "Gain G", keyPath: \.gGain, accent: .green)
+                .help("Adjust green gain")
+            adjustRow(icon: "b.circle.fill", label: "Gain B", keyPath: \.bGain, accent: .blue)
+                .help("Adjust blue gain")
 
             Divider()
                 .padding(.horizontal, 12)
@@ -69,20 +89,20 @@ struct ImageAdjustmentView: View {
                 actionButton(
                     title: "Invert Colors",
                     systemImage: "circle.lefthalf.filled",
-                    isActive: isInverted
+                    isActive: model.isInverted
                 ) {
-                    isInverted.toggle()
+                    model.isInverted.toggle()
                     commitAdjustment()
                 }
                 .help("Invert display colors (similar to night mode)")
 
                 actionButton(
-                    title: isPaused ? "Resume Adjustments" : "Pause Adjustments",
-                    systemImage: isPaused ? "play.circle" : "pause.circle",
-                    isActive: isPaused
+                    title: model.isPaused ? "Resume Adjustments" : "Pause Adjustments",
+                    systemImage: model.isPaused ? "play.circle" : "pause.circle",
+                    isActive: model.isPaused
                 ) {
-                    isPaused.toggle()
-                    if isPaused {
+                    model.isPaused.toggle()
+                    if model.isPaused {
                         GammaService.shared.applyIdentity(for: display.displayID)
                     } else {
                         commitAdjustment()
@@ -102,89 +122,39 @@ struct ImageAdjustmentView: View {
             .padding(.horizontal, 12)
             .padding(.bottom, 8)
         }
-        .onAppear {
-            if let saved = GammaService.shared.loadSavedState(for: display.displayID) {
-                contrast = saved.contrast
-                gammaVal = saved.gammaVal
-                gain = saved.gain
-                colorTemperature = saved.colorTemperature
-                rGamma = saved.rGamma; gGamma = saved.gGamma; bGamma = saved.bGamma
-                rGain = saved.rGain;   gGain = saved.gGain;   bGain = saved.bGain
-                quantLevels = Double(saved.quantizationLevels)
-                isInverted = saved.isInverted
-                isPaused = saved.isPaused
-                // Re-apply visually so the display matches the saved state immediately.
-                if !saved.isPaused {
-                    GammaService.shared.apply(saved, for: display.displayID)
-                }
-            }
-        }
         .onDisappear {
             // MenuBarExtra tears its content down on every panel close, so this runs far
             // more often than "the section was collapsed". It must therefore only persist
             // state and never touch display hardware: resetting here used to wipe the
             // ColorSync profile override installed by ColorProfileService and the
             // software-brightness dimming applied by BrightnessService.
-            let isAtZero = contrast == 0 && gammaVal == 0 && gain == 0 &&
-                colorTemperature == 0 && rGamma == 0 && gGamma == 0 && bGamma == 0 &&
-                rGain == 0 && gGain == 0 && bGain == 0 && !isInverted &&
-                quantLevels == 256
-            if isAtZero {
+            if model.isAtDefaults {
                 // At defaults the display already shows the neutral transfer function (the
                 // last commit applied an identity adjustment), so there is nothing to
                 // restore — only the persisted state needs clearing.
                 GammaService.shared.clearSavedState(for: display.displayID)
             } else {
-                let adj = GammaAdjustment(
-                    contrast: contrast, gammaVal: gammaVal, gain: gain,
-                    colorTemperature: colorTemperature,
-                    rGamma: rGamma, gGamma: gGamma, bGamma: bGamma,
-                    rGain: rGain, gGain: gGain, bGain: bGain,
-                    quantizationLevels: Int(quantLevels),
-                    isInverted: isInverted, isPaused: isPaused
-                )
-                GammaService.shared.saveState(adj, for: display.displayID)
+                GammaService.shared.saveState(model.adjustment, for: display.displayID)
             }
         }
     }
 
-    // MARK: - Slider row builder
+    // MARK: - Row builder
 
     private func adjustRow(
         icon: String,
         label: String,
-        value: Binding<Double>,
+        keyPath: ReferenceWritableKeyPath<ImageAdjustmentModel, Double>,
         accent: Color = .blue
     ) -> some View {
-        AdjustRow(icon: icon, label: label, value: value, accent: accent, commitAction: commitAdjustment)
-    }
-
-    // MARK: - Quantization row
-
-    private var quantizationRow: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "chart.bar.fill")
-                .foregroundColor(.blue)
-                .frame(width: 18)
-                .font(.caption)
-
-            Text("Quantization")
-                .font(.caption)
-                .frame(width: 72, alignment: .leading)
-
-            Slider(value: $quantLevels, in: 2...256, step: 1) { _ in
-                commitAdjustment()
-            }
-            .help("Adjust quantization level")
-
-            Text(quantLevels >= 255 ? "∞" : "\(Int(quantLevels))")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .frame(width: 38, alignment: .trailing)
-                .monospacedDigit()
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 3)
+        AdjustRow(
+            icon: icon,
+            label: label,
+            accent: accent,
+            model: model,
+            keyPath: keyPath,
+            commitAction: commitAdjustment
+        )
     }
 
     // MARK: - Action button builder
@@ -211,32 +181,16 @@ struct ImageAdjustmentView: View {
         .buttonStyle(.plain)
     }
 
-    // MARK: - Helpers
+    // MARK: - Actions
 
     private func commitAdjustment() {
-        guard !isPaused else { return }
-        let adj = GammaAdjustment(
-            contrast: contrast,
-            gammaVal: gammaVal,
-            gain: gain,
-            colorTemperature: colorTemperature,
-            rGamma: rGamma, gGamma: gGamma, bGamma: bGamma,
-            rGain: rGain,   gGain: gGain,   bGain: bGain,
-            quantizationLevels: Int(quantLevels),
-            isInverted: isInverted,
-            isPaused: false
-        )
-        GammaService.shared.apply(adj, for: display.displayID)
+        guard !model.isPaused else { return }
+        GammaService.shared.apply(model.adjustment, for: display.displayID)
     }
 
     @MainActor
     private func resetAll() {
-        contrast = 0; gammaVal = 0; gain = 0; colorTemperature = 0
-        rGamma = 0; gGamma = 0; bGamma = 0
-        rGain = 0;  gGain = 0;  bGain = 0
-        quantLevels = 256
-        isInverted = false
-        isPaused = false
+        model.reset()
         GammaService.shared.clearSavedState(for: display.displayID)
         // Reset the gamma transfer table only: the ICC profile override belongs to
         // ColorProfileService, not to image adjustment, so it must survive this.
@@ -247,14 +201,99 @@ struct ImageAdjustmentView: View {
     }
 }
 
+// MARK: - Model
+
+/// Single source of truth for the panel. `@Observable` gives per-property change
+/// tracking, so a row that only reads `contrast` is not invalidated by a `gain` change.
+@Observable
+final class ImageAdjustmentModel {
+    var contrast: Double = 0
+    var gammaVal: Double = 0
+    var gain: Double = 0
+    var colorTemperature: Double = 0
+    var quantLevels: Double = 256
+    var rGamma: Double = 0
+    var gGamma: Double = 0
+    var bGamma: Double = 0
+    var rGain: Double = 0
+    var gGain: Double = 0
+    var bGain: Double = 0
+    var isInverted: Bool = false
+    var isPaused: Bool = false
+
+    init(saved: GammaAdjustment?) {
+        guard let s = saved else { return }
+        contrast = s.contrast
+        gammaVal = s.gammaVal
+        gain = s.gain
+        colorTemperature = s.colorTemperature
+        rGamma = s.rGamma
+        gGamma = s.gGamma
+        bGamma = s.bGamma
+        rGain = s.rGain
+        gGain = s.gGain
+        bGain = s.bGain
+        quantLevels = Double(s.quantizationLevels)
+        isInverted = s.isInverted
+        isPaused = s.isPaused
+    }
+
+    var adjustment: GammaAdjustment {
+        GammaAdjustment(
+            contrast: contrast,
+            gammaVal: gammaVal,
+            gain: gain,
+            colorTemperature: colorTemperature,
+            rGamma: rGamma, gGamma: gGamma, bGamma: bGamma,
+            rGain: rGain,   gGain: gGain,   bGain: bGain,
+            quantizationLevels: Int(quantLevels),
+            isInverted: isInverted,
+            // Commit only runs while unpaused, so this is false there; onDisappear needs
+            // the real value so a paused adjustment stays paused across menu opens.
+            isPaused: isPaused
+        )
+    }
+
+    var isAtDefaults: Bool {
+        contrast == 0 && gammaVal == 0 && gain == 0 &&
+            colorTemperature == 0 && rGamma == 0 && gGamma == 0 && bGamma == 0 &&
+            rGain == 0 && gGain == 0 && bGain == 0 && !isInverted &&
+            quantLevels == 256
+    }
+
+    func reset() {
+        contrast = 0
+        gammaVal = 0
+        gain = 0
+        colorTemperature = 0
+        rGamma = 0; gGamma = 0; bGamma = 0
+        rGain = 0;  gGain = 0;  bGain = 0
+        quantLevels = 256
+        isInverted = false
+        isPaused = false
+    }
+}
+
+// MARK: - Rows
+
 private struct AdjustRow: View {
     let icon: String
     let label: String
-    @Binding var value: Double
     let accent: Color
+    let model: ImageAdjustmentModel
+    let keyPath: ReferenceWritableKeyPath<ImageAdjustmentModel, Double>
     let commitAction: () -> Void
 
     @State private var highlighted: Bool = false
+
+    /// Reads through the key path so Observation registers a dependency on exactly this
+    /// property, not on the whole model.
+    private var valueBinding: Binding<Double> {
+        Binding(
+            get: { model[keyPath: keyPath] },
+            set: { model[keyPath: keyPath] = $0 }
+        )
+    }
 
     private func percentLabel(_ v: Double) -> String {
         let sign = v > 0 ? "+" : ""
@@ -272,7 +311,7 @@ private struct AdjustRow: View {
                 .font(.caption)
                 .frame(width: 72, alignment: .leading)
 
-            Slider(value: $value, in: -100...100, step: 1) { editing in
+            Slider(value: valueBinding, in: -100...100, step: 1) { editing in
                 if !editing {
                     commitAction()
                     withAnimation(.easeOut(duration: 0.3)) { highlighted = true }
@@ -284,12 +323,53 @@ private struct AdjustRow: View {
             }
             .tint(accent)
 
-            Text(percentLabel(value))
+            Text(percentLabel(model[keyPath: keyPath]))
                 .font(.caption)
                 .foregroundColor(highlighted ? accent : .secondary)
                 .frame(width: 38, alignment: .trailing)
                 .monospacedDigit()
                 .contentTransition(.numericText())
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 3)
+    }
+}
+
+private struct QuantizationRow: View {
+    let model: ImageAdjustmentModel
+    let commitAction: () -> Void
+
+    private var valueBinding: Binding<Double> {
+        Binding(
+            get: { model.quantLevels },
+            set: { model.quantLevels = $0 }
+        )
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "chart.bar.fill")
+                .foregroundColor(.blue)
+                .frame(width: 18)
+                .font(.caption)
+
+            Text("Quantization")
+                .font(.caption)
+                .frame(width: 72, alignment: .leading)
+
+            Slider(value: valueBinding, in: 2...256, step: 1) { editing in
+                // Commit on release only: the editing-changed closure fires at BOTH ends,
+                // so committing unconditionally wrote the gamma table twice per drag
+                // (once with the pre-drag value).
+                if !editing { commitAction() }
+            }
+            .help("Adjust quantization level")
+
+            Text(model.quantLevels >= 255 ? "∞" : "\(Int(model.quantLevels))")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .frame(width: 38, alignment: .trailing)
+                .monospacedDigit()
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 3)

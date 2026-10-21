@@ -15,6 +15,8 @@ All notable changes to Nunbit are documented here.
 - A Swift 6 main-actor violation that killed the app when dragging the brightness slider for an external display.
 - Combined brightness now follows brightness changed elsewhere (individual sliders, System Settings, native keys, monitor buttons) instead of freezing at its first value, and it is hidden when only one physical display is connected.
 - Virtual displays no longer show a brightness slider, receive brightness refreshes, or participate in Auto Brightness sync.
+- The Color Profile row now shows the real active profile (e.g. "Color LCD") instead of "Unknown", and the active profile is highlighted again. macOS 26 returns `DeviceProfileURL` as an `NSURL`, which the old string-only lookup silently dropped.
+- Image Adjustment no longer stutters when its panel opens: it no longer re-applies the gamma table from `onAppear` (DisplayManager already restores it at launch and after configuration changes), each slider row observes only its own value via an `@Observable` model, the view no longer observes the whole `DisplayInfo`, and quantization commits once on release instead of twice.
 - Built-in display brightness now works on macOS 26: `CGDisplayIOServicePort` returns 0 and `IODisplayConnect` services no longer exist, so the old IOKit path could neither read nor write the panel. Brightness now goes through the private DisplayServices framework (`DisplayServicesGetBrightness`/`SetBrightness`), with the IOKit/CoreDisplay paths kept as fallbacks. This also fixes Auto Brightness reading a stale constant of 1.0.
 
 ---

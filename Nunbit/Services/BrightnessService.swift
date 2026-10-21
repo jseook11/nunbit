@@ -185,7 +185,9 @@ final class BrightnessService: @unchecked Sendable {
                     continuation.resume(returning: self?.getInternalBrightness())
                 }
             }
-            if let b = brightness {
+            // Only publish a real change: the menu polls this twice a second, and an
+            // unconditional assignment re-rendered every view observing DisplayInfo.
+            if let b = brightness, abs(display.brightness - b) >= 0.5 {
                 display.brightness = b
             }
         } else {
@@ -216,7 +218,9 @@ final class BrightnessService: @unchecked Sendable {
                         }
                         // A usable Get VCP reply proves the DDC channel is alive again.
                         self.recordDDCSuccess(for: displayID)
-                        display.brightness = brightness
+                        if abs(display.brightness - brightness) >= 0.5 {
+                            display.brightness = brightness
+                        }
                     } else {
                         // No usable Get VCP reply. Some monitors accept Set VCP (so
                         // brightness writes work) but never answer reads, so do NOT mark

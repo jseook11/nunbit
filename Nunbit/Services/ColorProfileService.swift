@@ -141,11 +141,30 @@ final class ColorProfileService: @unchecked Sendable {
 
     // MARK: - Current Color Info
 
-    /// Returns the human-readable color space name for the given display.
+    /// Returns the human-readable name of the display's active color profile.
+    ///
+    /// Prefer the profile itself: `CGColorSpace.name` is nil for every ICC-based space
+    /// (which is what `CGDisplayCopyColorSpace` returns for a panel running its factory
+    /// profile), so relying on it alone showed "Unknown" for the built-in "Color LCD".
     func currentColorSpaceName(for displayID: CGDirectDisplayID) -> String {
+        if let url = currentProfileURL(for: displayID),
+           let profile = Self.makeProfile(from: url) {
+            return profile.name
+        }
+
         let colorSpace = CGDisplayCopyColorSpace(displayID)
-        guard let cfName = colorSpace.name else { return "Unknown" }
-        return humanReadable(cfName as String)
+        if let cfName = colorSpace.name {
+            return humanReadable(cfName as String)
+        }
+
+        // Last resort: the description ends with the profile name, e.g.
+        // "(kCGColorSpaceICCBased; kCGColorSpaceModelRGB; Color LCD)".
+        let description = String(describing: colorSpace)
+        if let tail = description.split(separator: ";").last {
+            let name = tail.trimmingCharacters(in: CharacterSet(charactersIn: " )"))
+            if !name.isEmpty { return name }
+        }
+        return "Unknown"
     }
 
     /// Returns a description like "Internal (8-bit)" for the display's current color mode.
@@ -207,11 +226,21 @@ final class ColorProfileService: @unchecked Sendable {
             return url as URL
         }
 
-        // Fall back to FactoryProfiles: the mode entry is a dict with a DeviceProfileURL string.
+        // Fall back to FactoryProfiles: the mode entry is a dict with a DeviceProfileURL.
+        // On macOS 26 the value is an NSURL, not a String (older systems used a path
+        // string), so handle both — otherwise the active profile resolves to nil and the
+        // UI cannot highlight it.
         if let modeName = activeModeName,
            let modeDict = factoryProfiles?[modeName] as? NSDictionary,
-           let urlString = modeDict["DeviceProfileURL"] as? String {
-            return URL(fileURLWithPath: urlString)
+           let urlValue = modeDict["DeviceProfileURL"] {
+            if let url = urlValue as? NSURL {
+                return url as URL
+            }
+            if let urlString = urlValue as? String {
+                return urlString.hasPrefix("file:")
+                    ? URL(string: urlString)
+                    : URL(fileURLWithPath: urlString)
+            }
         }
 
         return nil

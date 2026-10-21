@@ -27,3 +27,17 @@
 - The `isSwitching = true; syncCall(); isSwitching = false` pattern does not work: SwiftUI does not render in the middle of synchronous code → you must use async/await to give SwiftUI a chance to redraw
 - Wrapping a shared singleton (`XXX.shared`) in `@StateObject` is an anti-pattern: each View rebuild may create a new subscription → use `@ObservedObject` for shared singletons
 - The gamma table set by `CGSetDisplayTransferByFormula` is persistent at the kernel level and is not automatically restored when the View is destroyed → you must manually call `CGDisplayRestoreColorSyncSettings()` in `onDisappear` and when the app quits
+
+### L-040: Never write display hardware from an expandable view's `onAppear`
+- **Symptom**: Opening **Image Adjustment** visibly stuttered. The panel was persisted as expanded, so every menu open re-ran the apply.
+- **Cause**: `MenuBarExtra` tears its content down on close and rebuilds it on open. `ImageAdjustmentView.onAppear` loaded saved state and called `GammaService.apply` synchronously — a `CGSetDisplayTransfer*` WindowServer IPC — in the middle of the spring insertion animation. It was also redundant: `DisplayManager.scheduleDisplayStateRestore` already re-applies gamma at launch and after every display-configuration change.
+- **Fix**: load saved values only (into the view model) and let `DisplayManager` own hardware re-assertion. Commit writes only when a control is released.
+- **Lesson**: "The view appeared" is not a state-loss event. Re-assert shared hardware state at the event that resets it, not on every appearance — especially on the main thread inside an animation.
+- **Date**: 2026-10-21
+
+### L-041: With many independent controls, observe the property — not the container
+- **Symptom**: Dragging one of the 13 Image Adjustment sliders re-laid out the whole menu; the panel also re-rendered ~2×/s while idle.
+- **Cause**: every value was `@State` on the container, so one tick invalidated the whole body (13 rows + the `MenuBarExtra` `ScrollView`). `ImageAdjustmentView` also held `@ObservedObject var display`, so the brightness poll's `display.brightness` assignment rebuilt the panel even though the view only used `display.displayID`.
+- **Fix**: an `@Observable` model + per-row `ReferenceWritableKeyPath` bindings (a row reads only its own value), a plain `let` for the immutable `DisplayInfo`, change-thresholded brightness publishes, and quantization committing on release only (the editing-changed closure fires at both ends).
+- **Lesson**: `@Observable` tracks property access, not object identity — but only if each row reads the property itself. Passing values through a container body re-introduces whole-panel invalidation.
+- **Date**: 2026-10-21

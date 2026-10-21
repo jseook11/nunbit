@@ -125,13 +125,31 @@ struct DisplayDetailView: View {
             showImageAdjustment = loadExpanded("imageAdjust", default: false)
         }
         .onChange(of: showModeList) { _, v in saveExpanded("modeList", v) }
-        .onChange(of: showColorProfile) { _, v in saveExpanded("colorProfile", v) }
+        .onChange(of: showColorProfile) { _, v in
+            saveExpanded("colorProfile", v)
+            // Re-read on open: the active profile may have changed while it was closed.
+            if v { refreshColorSpaceName() }
+        }
         .onChange(of: showImageAdjustment) { _, v in saveExpanded("imageAdjust", v) }
         .task(id: display.displayID) {
             colorSpaceName = ""
-            guard !Task.isCancelled else { return }
-            colorSpaceName = ColorProfileService.shared.currentColorSpaceName(for: display.displayID)
+            await readColorSpaceName()
         }
+    }
+
+    /// ColorSync device lookup + ICC parsing is IPC/file I/O; keep it off the main thread.
+    private func refreshColorSpaceName() {
+        Task { await readColorSpaceName() }
+    }
+
+    @MainActor
+    private func readColorSpaceName() async {
+        let id = display.displayID
+        let name = await Task.detached(priority: .userInitiated) {
+            ColorProfileService.shared.currentColorSpaceName(for: id)
+        }.value
+        guard !Task.isCancelled else { return }
+        colorSpaceName = name
     }
 }
 

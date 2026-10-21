@@ -151,3 +151,10 @@
 - **Fix**: Merge instead of replace — read the existing plist, keep every unknown key and union `scale-resolutions`. Record what this app actually created in `~/Library/Application Support/Nunbit/hidpi-overrides.json` (`createdFile`, `ourEntries`, keyed `vendor-product`); delete the file only when `createdFile` is true, otherwise remove only our entries. Report a foreign override as `.managedByOther` and make the toggle a no-op. "Enabled" now means "a non-empty `scale-resolutions` array", not "a file exists"
 - **Lesson**: A shared, privileged on-disk location needs an explicit ownership record. Inferring ownership from existence is how one display tool destroys another's configuration
 - **Date**: 2026-10-21
+
+### L-042: The active color profile is not the `CGColorSpace` name
+- **Symptom**: The Color Profile row showed **Unknown** and no profile was highlighted, even though the built-in panel was running Apple's **Color LCD** profile. It looked as if profile switching did not work.
+- **Cause**: two independent type/API assumptions. (1) `CGDisplayCopyColorSpace` returns an ICC-based space whose `.name` is `nil` — only named spaces (sRGB, P3, …) populate it, which is why the old code fell through to "Unknown". (2) On macOS 26, `FactoryProfiles[mode]["DeviceProfileURL"]` is an **NSURL**, not a String; the `as? String` lookup failed, so the active profile resolved to nil and nothing could be highlighted.
+- **Fix**: Resolve the active profile through `ColorSyncDeviceCopyDeviceInfo`, accept both `NSURL` and `String` for `DeviceProfileURL`, and read the display name from `ColorSyncProfileCopyDescriptionString` (already human-readable: "Color LCD"). Fall back to the tail of the `CGColorSpace` description, then to "Unknown". Verified that applying works: setting sRGB produced `CustomProfiles[mode] = sRGB URL` and changed the live color space; passing `kCFNull` restored Color LCD.
+- **Lesson**: CF-dictionary value types drift between OS releases — never assume `String`. And `CGColorSpace.name` is only populated for named spaces; an ICC-backed space carries its profile name in its description.
+- **Date**: 2026-10-21
