@@ -35,9 +35,27 @@ final class ColorProfileService: @unchecked Sendable {
 
     // MARK: - Profile Enumeration
 
-    /// Returns all installed ICC profiles sorted alphabetically.
-    func enumerateProfiles() async -> [ICCProfile] {
-        await Task.detached(priority: .userInitiated) {
+    /// The profiles applicable to one display, plus the URL of its active profile.
+    struct ProfileCatalog {
+        let profiles: [ICCProfile]
+        let currentURL: URL?
+    }
+
+    /// Returns the installed ICC profiles that apply to `displayID`, sorted alphabetically.
+    ///
+    /// macOS writes one `<DisplayName>-<DisplayUUID>.icc` per display it has ever seen —
+    /// old monitors, Sidecar sessions, virtual displays and an all-zero generic copy — and
+    /// every file carries the same human-readable description. Listing the whole folder
+    /// made the picker look full of duplicates. Keep only this display's own file, the
+    /// currently active profile (whatever its UUID) and the generic profiles that live
+    /// outside the per-display `Displays` folders.
+    func enumerateProfiles(for displayID: CGDirectDisplayID) async -> ProfileCatalog {
+        // Everything here is IPC/file I/O (ColorSync device info, a recursive scan and ICC
+        // header parsing), so it all runs off the main actor.
+        let result: (profiles: [ICCProfile], currentURL: URL?, displayUUID: String?) =
+            await Task.detached(priority: .userInitiated) {
+            let currentURL = self.currentProfileURL(for: displayID)
+            let displayUUID = Self.displayUUIDString(for: displayID)
             var profiles: [ICCProfile] = []
             let searchURLs: [URL] = [
                 URL(fileURLWithPath: "/Library/ColorSync/Profiles"),
@@ -71,10 +89,55 @@ final class ColorProfileService: @unchecked Sendable {
                 }
             }
 
-            return profiles.sorted {
+            let sorted = profiles.sorted {
                 $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
             }
+            return (sorted, currentURL, displayUUID)
         }.value
+
+        let relevant = result.profiles.filter {
+            Self.isProfileRelevant($0.path, displayUUID: result.displayUUID, activeURL: result.currentURL)
+        }
+        return ProfileCatalog(profiles: relevant, currentURL: result.currentURL)
+    }
+
+    // MARK: - Display-specific filtering
+
+    /// UUID string of a CGDirectDisplayID, matching the suffix macOS uses on display
+    /// profile filenames (`Color LCD-37D8832A-2D66-02CA-B9F7-8F30A301B230.icc`).
+    static func displayUUIDString(for displayID: CGDirectDisplayID) -> String? {
+        guard let rawUUID = CGDisplayCreateUUIDFromDisplayID(displayID) else { return nil }
+        let uuid = rawUUID.takeRetainedValue()
+        guard let string = CFUUIDCreateString(nil, uuid) else { return nil }
+        return (string as String).uppercased()
+    }
+
+    /// Extracts the trailing display UUID from a profile filename, if present.
+    private static func uuidFromProfileFileName(_ fileName: String) -> String? {
+        let base = (fileName as NSString).deletingPathExtension
+        guard base.count >= 37 else { return nil }
+        let uuid = String(base.suffix(36))
+        guard base[base.index(base.endIndex, offsetBy: -37)] == "-" else { return nil }
+        let pattern = "^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$"
+        guard uuid.range(of: pattern, options: .regularExpression) != nil else { return nil }
+        return uuid.uppercased()
+    }
+
+    /// A profile is shown for a display when it is generic, when it belongs to this
+    /// display's UUID, or when it is the profile that is actually active right now.
+    private static func isProfileRelevant(
+        _ url: URL,
+        displayUUID: String?,
+        activeURL: URL?
+    ) -> Bool {
+        guard url.path.contains("/ColorSync/Profiles/Displays/") else { return true }
+        if let activeURL,
+           url.standardizedFileURL == activeURL.standardizedFileURL {
+            return true
+        }
+        guard let profileUUID = uuidFromProfileFileName(url.lastPathComponent),
+              let displayUUID else { return true }
+        return profileUUID == displayUUID
     }
 
     static func makeProfile(from url: URL) -> ICCProfile? {

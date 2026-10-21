@@ -92,20 +92,18 @@ struct DisplayDetailView: View {
                     ))
             }
 
-            // Image adjustment section
+            // Image adjustment section. Expanded without animation: the 13-slider
+            // subtree is tall enough that a per-frame spring layout is visibly janky.
             ExpandableRow(
                 icon: "slider.horizontal.3",
                 label: "Image Adjustment",
-                isExpanded: $showImageAdjustment
+                isExpanded: $showImageAdjustment,
+                animation: nil
             )
 
             if showImageAdjustment {
                 ImageAdjustmentView(display: display)
                     .padding(.leading, 8)
-                    .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .move(edge: .top)),
-                        removal: .opacity
-                    ))
             }
 
             Divider().opacity(0.3).padding(.vertical, 2)

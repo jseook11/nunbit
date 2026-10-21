@@ -24,6 +24,10 @@ struct ExpandableRow: View {
     let label: String
     var subtitle: String? = nil
     @Binding var isExpanded: Bool
+    /// `nil` expands without animation. Large sections (Image Adjustment) use this:
+    /// animating a 400 px subtree forces SwiftUI/AppKit to re-layout it every frame,
+    /// which is far more expensive than the single layout an instant toggle costs.
+    var animation: Animation? = .spring(response: 0.3, dampingFraction: 0.8)
     @State private var isHovered = false
 
     var body: some View {
@@ -50,7 +54,7 @@ struct ExpandableRow: View {
         .background(Color.primary.opacity(isHovered ? 0.06 : 0))
         .contentShape(Rectangle())
         .onTapGesture {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            withAnimation(animation) {
                 isExpanded.toggle()
             }
         }

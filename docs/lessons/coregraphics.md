@@ -158,3 +158,10 @@
 - **Fix**: Resolve the active profile through `ColorSyncDeviceCopyDeviceInfo`, accept both `NSURL` and `String` for `DeviceProfileURL`, and read the display name from `ColorSyncProfileCopyDescriptionString` (already human-readable: "Color LCD"). Fall back to the tail of the `CGColorSpace` description, then to "Unknown". Verified that applying works: setting sRGB produced `CustomProfiles[mode] = sRGB URL` and changed the live color space; passing `kCFNull` restored Color LCD.
 - **Lesson**: CF-dictionary value types drift between OS releases — never assume `String`. And `CGColorSpace.name` is only populated for named spaces; an ICC-backed space carries its profile name in its description.
 - **Date**: 2026-10-21
+
+### L-043: Per-display ICC files all share one description
+- **Symptom**: The Color Profile list showed "Color LCD" twice and "Sidecar Display" three times, which looked like duplicates or a bug.
+- **Cause**: macOS writes `/Library/ColorSync/Profiles/Displays/<DisplayName>-<DisplayUUID>.icc` for **every display it has ever seen** — old monitors, each Sidecar session, virtual displays, plus an all-zero generic copy. The ICC description is only the display name, so all of those files are indistinguishable in the UI.
+- **Fix**: Filter the picker by the trailing display UUID in the filename. Keep the current display's file, the profile that is actually active (whatever its UUID), and the generic profiles that live outside the `Displays` folders. Verified on macOS 26: the list drops from 13+ display files to the one matching `Color LCD-37D8832A-…`.
+- **Lesson**: A human-readable display-name string is not an identifier. When the OS keys files by UUID, filter by that UUID — not by the description.
+- **Date**: 2026-10-21

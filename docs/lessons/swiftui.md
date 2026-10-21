@@ -41,3 +41,10 @@
 - **Fix**: an `@Observable` model + per-row `ReferenceWritableKeyPath` bindings (a row reads only its own value), a plain `let` for the immutable `DisplayInfo`, change-thresholded brightness publishes, and quantization committing on release only (the editing-changed closure fires at both ends).
 - **Lesson**: `@Observable` tracks property access, not object identity — but only if each row reads the property itself. Passing values through a container body re-introduces whole-panel invalidation.
 - **Date**: 2026-10-21
+
+### L-044: Time-to-first-paint — render cached state immediately, keep the common path small
+- **Symptom**: After removing the hardware write and the spring animation, opening Image Adjustment still felt a few hundred milliseconds late. An external `sample` showed `FluidSpringAnimation` down from 229 samples to 4, but `NSHostingView.layout` + text drawing + slider creation remained in the first run-loop turn.
+- **Cause**: thirteen AppKit-backed `Slider`s were constructed before the panel could paint; the `MenuBarExtra` window cannot display anything until that layout finishes. Animating a tall subtree made it worse by re-laying it out every frame.
+- **Fix**: (1) expand large sections with `animation: nil`; (2) keep the rarely used Per-Channel Gamma/Gain groups collapsed, so the common path builds five sliders, not thirteen; (3) load the persisted adjustment before the first render and keep an in-memory mirror in `GammaService` (`savedStateCache`) so re-opening the panel never goes through cfprefsd; (4) reconcile with the live in-memory adjustment *after* the first frame, and only when it differs — the app is the only writer, so the cached value is almost always right; (5) never observe the whole `DisplayInfo` from the panel.
+- **Lesson**: For app-owned state, an optimistic cached render beats staged placeholders. Staging labels-then-controls produced visible popping and fading that felt worse than the single cheap layout, even though the cached values were correct the whole time. Keep the *common path* small (collapse rare groups) instead of hiding the visible controls behind a delay.
+- **Date**: 2026-10-21

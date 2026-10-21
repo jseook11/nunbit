@@ -21,6 +21,8 @@ struct ImageAdjustmentView: View {
     let display: DisplayInfo
 
     @State private var model: ImageAdjustmentModel
+    @State private var showChannelGamma = false
+    @State private var showChannelGain = false
 
     init(display: DisplayInfo) {
         self.display = display
@@ -33,7 +35,7 @@ struct ImageAdjustmentView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
 
-            // ── Group 1: Global adjustments ────────────────────────────────
+            // ── Global adjustments (always visible) ────────────────────────
             adjustRow(icon: "circle.righthalf.filled", label: "Contrast",         keyPath: \.contrast)
                 .help("Adjust contrast")
             adjustRow(icon: "sparkle",                 label: "Gamma",            keyPath: \.gammaVal)
@@ -48,25 +50,32 @@ struct ImageAdjustmentView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 2)
 
-            // ── Group 2: Per-channel gamma ─────────────────────────────────
-            adjustRow(icon: "r.circle", label: "Gamma R", keyPath: \.rGamma, accent: .red)
-                .help("Adjust red gamma")
-            adjustRow(icon: "g.circle", label: "Gamma G", keyPath: \.gGamma, accent: .green)
-                .help("Adjust green gamma")
-            adjustRow(icon: "b.circle", label: "Gamma B", keyPath: \.bGamma, accent: .blue)
-                .help("Adjust blue gamma")
+            // ── Per-channel adjustments (collapsed by default) ─────────────
+            // Rarely used, and each expanded group builds three more AppKit sliders.
+            // Collapsed means the common path creates five sliders, not thirteen.
+            SubgroupRow(icon: "r.circle", label: "Per-Channel Gamma", isExpanded: $showChannelGamma)
+            if showChannelGamma {
+                adjustRow(icon: "r.circle", label: "Gamma R", keyPath: \.rGamma, accent: .red)
+                    .help("Adjust red gamma")
+                adjustRow(icon: "g.circle", label: "Gamma G", keyPath: \.gGamma, accent: .green)
+                    .help("Adjust green gamma")
+                adjustRow(icon: "b.circle", label: "Gamma B", keyPath: \.bGamma, accent: .blue)
+                    .help("Adjust blue gamma")
+            }
 
             Divider()
                 .padding(.horizontal, 12)
                 .padding(.vertical, 2)
 
-            // ── Group 3: Per-channel gain ──────────────────────────────────
-            adjustRow(icon: "r.circle.fill", label: "Gain R", keyPath: \.rGain, accent: .red)
-                .help("Adjust red gain")
-            adjustRow(icon: "g.circle.fill", label: "Gain G", keyPath: \.gGain, accent: .green)
-                .help("Adjust green gain")
-            adjustRow(icon: "b.circle.fill", label: "Gain B", keyPath: \.bGain, accent: .blue)
-                .help("Adjust blue gain")
+            SubgroupRow(icon: "r.circle.fill", label: "Per-Channel Gain", isExpanded: $showChannelGain)
+            if showChannelGain {
+                adjustRow(icon: "r.circle.fill", label: "Gain R", keyPath: \.rGain, accent: .red)
+                    .help("Adjust red gain")
+                adjustRow(icon: "g.circle.fill", label: "Gain G", keyPath: \.gGain, accent: .green)
+                    .help("Adjust green gain")
+                adjustRow(icon: "b.circle.fill", label: "Gain B", keyPath: \.bGain, accent: .blue)
+                    .help("Adjust blue gain")
+            }
 
             Divider()
                 .padding(.horizontal, 12)
@@ -121,6 +130,16 @@ struct ImageAdjustmentView: View {
             }
             .padding(.horizontal, 12)
             .padding(.bottom, 8)
+        }
+        .task {
+            // The panel paints immediately from the cached saved state (which the app
+            // itself is the only writer of). Reconcile with the live in-memory
+            // adjustment afterwards; when they match — the common case — nothing
+            // changes and there is no layout shift.
+            guard let live = GammaService.shared.activeAdjustment(for: display.displayID) else { return }
+            if model.adjustment != live {
+                model.replace(with: live)
+            }
         }
         .onDisappear {
             // MenuBarExtra tears its content down on every panel close, so this runs far
@@ -222,7 +241,12 @@ final class ImageAdjustmentModel {
     var isPaused: Bool = false
 
     init(saved: GammaAdjustment?) {
-        guard let s = saved else { return }
+        if let saved { replace(with: saved) }
+    }
+
+    /// Replaces all values from an authoritative adjustment (used to reconcile the
+    /// cached first paint with the live in-memory state).
+    func replace(with s: GammaAdjustment) {
         contrast = s.contrast
         gammaVal = s.gammaVal
         gain = s.gain
@@ -275,6 +299,42 @@ final class ImageAdjustmentModel {
 }
 
 // MARK: - Rows
+
+/// Compact disclosure header for a rarely used subgroup. Toggling builds the three
+/// sliders only when the user asks for them; no animation so the layout is a single pass.
+private struct SubgroupRow: View {
+    let icon: String
+    let label: String
+    @Binding var isExpanded: Bool
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .foregroundColor(.secondary)
+                .frame(width: 18)
+                .font(.caption)
+            Text(label)
+                .font(.caption)
+                .foregroundColor(.secondary)
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.caption2)
+                .foregroundColor(.secondary)
+                .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                .animation(.easeInOut(duration: 0.15), value: isExpanded)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 5)
+        .background(Color.primary.opacity(isHovered ? 0.06 : 0))
+        .contentShape(Rectangle())
+        .onTapGesture { isExpanded.toggle() }
+        .onHover { isHovered = $0 }
+        .accessibilityLabel(isExpanded ? "\(label), expanded" : "\(label), collapsed")
+        .accessibilityAddTraits(.isButton)
+        .help("Click to expand or collapse this group")
+    }
+}
 
 private struct AdjustRow: View {
     let icon: String
@@ -358,9 +418,9 @@ private struct QuantizationRow: View {
                 .frame(width: 72, alignment: .leading)
 
             Slider(value: valueBinding, in: 2...256, step: 1) { editing in
-                // Commit on release only: the editing-changed closure fires at BOTH ends,
-                // so committing unconditionally wrote the gamma table twice per drag
-                // (once with the pre-drag value).
+                // Commit on release only: the editing-changed closure fires at BOTH
+                // ends, so committing unconditionally wrote the gamma table twice per
+                // drag (once with the pre-drag value).
                 if !editing { commitAction() }
             }
             .help("Adjust quantization level")

@@ -5,7 +5,7 @@ import CoreGraphics
 /// Per-display software image adjustment parameters.
 /// All slider values are in the range -100...+100 with 0 = neutral,
 /// except quantizationLevels (2...256, 256 = no quantization).
-struct GammaAdjustment {
+struct GammaAdjustment: Equatable {
     var contrast: Double = 0.0          // -100 to +100, 0 = neutral
     var gammaVal: Double = 0.0          // -100 to +100, 0 = neutral (gamma exponent 1.0)
     var gain: Double = 0.0              // -100 to +100, 0 = neutral (multiplier 1.0)
@@ -60,6 +60,12 @@ final class GammaService: @unchecked Sendable {
 
     /// Stores the most recently applied non-paused adjustment per display.
     private var activeAdjustments: [CGDirectDisplayID: GammaAdjustment] = [:]
+
+    /// The live adjustment applied this session, if any. Used by the UI to reconcile the
+    /// cached saved state after its first paint.
+    func activeAdjustment(for displayID: CGDirectDisplayID) -> GammaAdjustment? {
+        adjustmentsLock.withLock { activeAdjustments[displayID] }
+    }
 
     /// Returns true if there is a currently active (non-paused) gamma adjustment for this display.
     func hasActiveAdjustment(for displayID: CGDirectDisplayID) -> Bool {
@@ -162,6 +168,15 @@ final class GammaService: @unchecked Sendable {
         PerDisplayStore.key("fd.GammaService.savedAdjustment.", for: displayID)
     }
 
+    private struct CachedSavedState {
+        let adjustment: GammaAdjustment?
+    }
+
+    /// In-memory mirror of the persisted state. `MenuBarExtra` rebuilds its content on
+    /// every open, so the panel's initial read must not hit cfprefsd each time. A missing
+    /// key means "not loaded yet"; a present entry may legitimately hold nil.
+    private var savedStateCache: [CGDirectDisplayID: CachedSavedState] = [:]
+
     func saveState(_ adj: GammaAdjustment, for displayID: CGDirectDisplayID) {
         let dict: [String: Any] = [
             "contrast": adj.contrast,
@@ -175,9 +190,19 @@ final class GammaService: @unchecked Sendable {
             "isPaused": adj.isPaused
         ]
         UserDefaults.standard.set(dict, forKey: GammaService.stateKey(for: displayID))
+        adjustmentsLock.withLock { savedStateCache[displayID] = CachedSavedState(adjustment: adj) }
     }
 
     func loadSavedState(for displayID: CGDirectDisplayID) -> GammaAdjustment? {
+        if let cached = adjustmentsLock.withLock({ savedStateCache[displayID] }) {
+            return cached.adjustment
+        }
+        let adjustment = loadSavedStateFromDefaults(for: displayID)
+        adjustmentsLock.withLock { savedStateCache[displayID] = CachedSavedState(adjustment: adjustment) }
+        return adjustment
+    }
+
+    private func loadSavedStateFromDefaults(for displayID: CGDirectDisplayID) -> GammaAdjustment? {
         guard let dict = UserDefaults.standard.dictionary(forKey: GammaService.stateKey(for: displayID)) else { return nil }
         var adj = GammaAdjustment()
         adj.contrast           = dict["contrast"]           as? Double ?? 0
@@ -198,6 +223,7 @@ final class GammaService: @unchecked Sendable {
 
     func clearSavedState(for displayID: CGDirectDisplayID) {
         UserDefaults.standard.removeObject(forKey: GammaService.stateKey(for: displayID))
+        adjustmentsLock.withLock { savedStateCache[displayID] = CachedSavedState(adjustment: nil) }
     }
 
     /// Re-applies the gamma state this display should have after WindowServer discarded

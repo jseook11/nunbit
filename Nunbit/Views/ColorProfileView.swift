@@ -108,13 +108,9 @@ struct ColorProfileView: View {
         isLoading = true
         let displayID = display.displayID
         let svc = ColorProfileService.shared
-        let loaded = await svc.enumerateProfiles()
-        // ColorSyncDeviceCopyDeviceInfo is IPC — do not run it on the main actor.
-        let currentURL = await Task.detached(priority: .userInitiated) {
-            svc.currentProfileURL(for: displayID)
-        }.value
-        profiles = loaded
-        selectedPath = currentURL
+        let catalog = await svc.enumerateProfiles(for: displayID)
+        profiles = catalog.profiles
+        selectedPath = catalog.currentURL
         isLoading = false
     }
 
@@ -123,10 +119,18 @@ struct ColorProfileView: View {
         guard applyingPath == nil else { return }
         applyError = nil
         applySuccess = false
+
+        let displayID = display.displayID
+
         Task { @MainActor in
             applyingPath = profile.path
-            defer { applyingPath = nil }
-            let success = ColorProfileService.shared.setProfile(profile, for: display.displayID)
+            // ColorSyncDeviceSetCustomProfiles is IPC — keep it off the main actor so the
+            // progress indicator can paint while it runs.
+            let success = await Task.detached(priority: .userInitiated) {
+                ColorProfileService.shared.setProfile(profile, for: displayID)
+            }.value
+            applyingPath = nil
+
             if success {
                 selectedPath = profile.path
                 applySuccess = true
