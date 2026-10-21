@@ -155,11 +155,13 @@ class DisplayManager: ObservableObject {
     /// the monitor brighter than the user set it, until an unrelated view re-applied the
     /// adjustment by hand.
     ///
-    /// Two passes per change: an early one so the visible blip stays short, and a late one
-    /// because a write that lands while WindowServer is still committing the transaction is
-    /// silently discarded — the reconfiguration callback and the AppKit notification can
-    /// both fire mid-commit. Re-applying is idempotent, so the second pass is cheap.
-    private static let stateRestoreDelays: [TimeInterval] = [0.15, 1.2]
+    /// Passes per change. The transfer table is reset by WindowServer itself, so a short
+    /// visible blip is unavoidable; what these control is how quickly it ends. A write that
+    /// lands while the transaction is still committing is silently discarded, so the first
+    /// pass is early (measured: the reset lands ~0.2 s after the display appears) and the
+    /// later ones guarantee the state comes back even if that first write was dropped.
+    /// Re-applying is idempotent, so extra passes cost nothing visible.
+    private static let stateRestoreDelays: [TimeInterval] = [0.05, 0.25, 1.2]
 
     func scheduleDisplayStateRestore() {
         stateRestoreWorkItems.forEach { $0.cancel() }

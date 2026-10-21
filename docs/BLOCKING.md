@@ -30,12 +30,6 @@
 
 ## 🔵 P2 — Normal Priority
 
-### B-006: The FreeDisplay → Nunbit rename orphaned all of the user's persisted settings
-- **Symptom**: The UserDefaults domain changed from `com.freedisplay.app` to `com.jseook11.nunbit`, and the Application Support folder from `FreeDisplay` to `Nunbit`. The old domain still holds `fd.brightness_3 = 15`, `fd.ResolutionService.savedModes = {3 = 51}`, `fd.VirtualDisplayConfigs`, `fd.headless.configID`; the new domain holds fresh values (`fd.brightness_3 = 5`, `fd.checkUpdatesOnLaunch = 1`), meaning the renamed app has already run and overwritten nothing. Result: per-display brightness, saved resolutions, virtual-display configs and the headless session config silently reset to defaults.
-- **Impact**: user-visible — saved resolutions are no longer re-applied after reconnect/reboot.
-- **Fix**: one-time migration on launch — if the new domain has no settings marker yet, copy the `fd.*` keys from the old domain (`UserDefaults(suiteName: "com.freedisplay.app")`) and set a `fd.migratedFromFreeDisplay` marker. Also move anything under `~/Library/Application Support/FreeDisplay/` to `.../Nunbit/`.
-- **Added on**: 2026-10-21
-
 ### B-007: The Intel DDC read path parses replies with no validation at all
 - **File**: `Nunbit/Services/DDCService.swift:615-618` (`intelReadSynchronous`)
 - **Symptom**: `maxVal`/`curVal` are read straight out of `rb[6..9]` with no check on the source address, payload length, opcode, result code, echoed VCP or checksum. This is the same class of bug as the one just fixed on the ARM64 path (commit 8f51901) — a monitor that answers with garbage yields a nonsense `max`, and every later write is scaled against it.
@@ -99,6 +93,13 @@
 ---
 
 ## ✅ Resolved
+
+### ~~B-006: The FreeDisplay → Nunbit rename orphaned all of the user's persisted settings~~
+- **Cause**: The rename changed the bundle identifier, so everything the user had configured stayed in the `com.freedisplay.app` domain while the app now reads `com.jseook11.nunbit` (and `~/Library/Application Support/FreeDisplay/` instead of `Nunbit/`).
+- **Fix**: `SettingsService.migrateLegacyFreeDisplaySettingsIfNeeded` runs once at launch (marker `fd.migratedFromFreeDisplay`), **additively** — a key is copied only when the new domain does not have it, and files in the old Application Support folder are copied only when the destination is absent. A wholesale copy would be actively harmful: by the time the migration ran, the new domain already held every meaningful key with a *newer* value the user had set since the rename (brightness 5 against the old 15, a re-created virtual-display config, a new headless config ID), so overwriting would have resurrected stale settings.
+- **Outcome on the machine this was found on**: nothing needed to move — the only keys copied were `fd.brightness_3` (a legacy numeric key that `PerDisplayStore` ignores because the UUID-keyed value exists) and one `fd.expanded.*` UI-state key. The one genuinely lost item was the pre-rename `1920×1080` virtual-display config, superseded by the `2560×1440` one created after the rename.
+- **Resolved on**: 2026-10-21
+- **Lesson**: A rename/rebrand migration must be additive and must never assume the new domain is empty — by the time anyone writes the migration, the app has usually been running under the new name for a while and the user has already re-set what they care about.
 
 ### ~~B-030: Activating a virtual display silently wiped every display's brightness/gamma state~~
 - **Symptom**: With brightness set low (DDC 5%) and a colour adjustment saved, turning a virtual display on made the physical monitor visibly brighter. It stayed that way until the user opened that display's *Image Adjustment* section, which restored it. Turning the virtual display off did the same.

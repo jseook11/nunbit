@@ -43,7 +43,59 @@ final class SettingsService: ObservableObject, @unchecked Sendable {
     }()
 
     private init() {
+        SettingsService.migrateLegacyFreeDisplaySettingsIfNeeded(supportDir: supportDir)
         loadAll()
+    }
+
+    // MARK: - FreeDisplay → Nunbit migration
+
+    /// The rename changed the bundle identifier, so everything the user had configured lived
+    /// in the `com.freedisplay.app` domain (and `~/Library/Application Support/FreeDisplay/`)
+    /// while the app now reads `com.jseook11.nunbit`.
+    ///
+    /// Deliberately **additive**: a key is copied only when the new domain does not have it
+    /// yet. Copying wholesale would resurrect settings the user has since changed — on the
+    /// machine this was written for, the old domain still held `fd.brightness_3 = 15` and a
+    /// virtual-display config that had both been superseded. Runs once, guarded by a marker.
+    private static func migrateLegacyFreeDisplaySettingsIfNeeded(supportDir: URL) {
+        let defaults = UserDefaults.standard
+        let marker = "fd.migratedFromFreeDisplay"
+        guard !defaults.bool(forKey: marker) else { return }
+
+        let legacyDomain = "com.freedisplay.app"
+        var copied = 0
+        if let legacy = UserDefaults(suiteName: legacyDomain)?
+            .persistentDomain(forName: legacyDomain) {
+            for (key, value) in legacy where key.hasPrefix("fd.") {
+                // Never overwrite a value this app has already written.
+                guard defaults.object(forKey: key) == nil else { continue }
+                defaults.set(value, forKey: key)
+                copied += 1
+            }
+        }
+
+        migrateSupportDirectory(from: "FreeDisplay", to: supportDir)
+
+        defaults.set(true, forKey: marker)
+        #if DEBUG
+        print("[SettingsService] FreeDisplay migration: copied \(copied) key(s) from \(legacyDomain)")
+        #endif
+    }
+
+    /// Moves any file the old name left in Application Support, without clobbering files
+    /// this version has already written.
+    private static func migrateSupportDirectory(from oldName: String, to newDir: URL) {
+        let fm = FileManager.default
+        guard let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return }
+        let oldDir = base.appendingPathComponent(oldName, isDirectory: true)
+        guard fm.fileExists(atPath: oldDir.path),
+              let entries = try? fm.contentsOfDirectory(at: oldDir, includingPropertiesForKeys: nil) else { return }
+
+        for source in entries {
+            let destination = newDir.appendingPathComponent(source.lastPathComponent)
+            guard !fm.fileExists(atPath: destination.path) else { continue }
+            try? fm.copyItem(at: source, to: destination)
+        }
     }
 
     // MARK: - Keys

@@ -97,6 +97,13 @@
 - **Lesson**: A non-`@Sendable` closure parameter inherits the isolation of the enclosing context. If the callee runs it on another queue, Swift 6 traps at runtime even though the code compiles. Either mark the parameter `@Sendable` (and keep the body nonisolated) or mark it `@MainActor` and hop explicitly.
 - **Date**: 2026-10-21
 
+### L-038: A rename/rebrand settings migration must be additive
+- **Symptom**: After the bundle identifier changed (`com.freedisplay.app` → `com.jseook11.nunbit`), the app read a fresh, empty domain and every saved setting appeared to be gone
+- **Cause**: UserDefaults and the Application Support folder are both keyed by name; the rename silently pointed the app at new ones. The obvious fix — copy the old domain over — is wrong, because the app has usually been running under the new name for a while and the user has already re-set what they care about (on this machine: brightness 5 in the new domain against 15 in the old, a re-created virtual-display config, a new headless config ID)
+- **Fix**: `SettingsService.migrateLegacyFreeDisplaySettingsIfNeeded` copies a key only when the new domain does not have it, and a file only when the destination is absent, guarded by a `fd.migratedFromFreeDisplay` marker
+- **Lesson**: A migration written after the fact is a *merge*, not a restore. Never let it overwrite a value the new domain already holds — resurrecting stale settings is worse than leaving them missing
+- **Date**: 2026-10-21
+
 ### L-035: Per-display settings must not be keyed by CGDirectDisplayID
 - **Symptom**: Saved brightness/contrast/gamma and the saved resolution silently stopped applying after sleep, reconnect or reboot
 - **Cause**: Keys were built as `fd.brightness_<displayID>`, `fd.softBrightness_<displayID>`, `fd.GammaService.savedAdjustment.<displayID>` and `fd.ResolutionService.savedModes["<displayID>"]`. CoreGraphics may hand the same physical display a different ID after a reconnect or reboot, so the saved value was looked up under a key that no longer existed
