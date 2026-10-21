@@ -277,7 +277,7 @@ struct MenuBarView: View {
 
         // Version and quit (fixed at the bottom, does not scroll with content)
         HStack {
-            Text("Nunbit v\(updateService.currentVersion)")
+            Text("v\(updateService.currentVersion)")
                 .font(.caption)
                 .fontWeight(.medium)
                 .foregroundColor(.secondary)
