@@ -1,60 +1,60 @@
 # Blocking Issues — FreeDisplay
 
-> 更新: 2026-03-02 | **开工前必读，有未解决的 P0/P1 问题时必须先处理**
+> Updated: 2026-03-02 | **Must read before starting work; unresolved P0/P1 issues must be handled first**
 
-## 调度规则
+## Scheduling Rules
 
-1. 读完此文件 → 如果有 P0/P1 问题 → **按优先级从高到低逐个解决，全部清完再做 ROADMAP**
-2. 如果只有 P2 问题 → 可以先做 ROADMAP 任务，穿插解决 P2
-3. 解决后 → 移到下方"已解决"区，写上解法
-4. 工作中遇到新的卡住问题 → 立刻加到这里
-
----
-
-## 🔴 P0 — 硬阻塞
-
-（暂无）
+1. Finish reading this file → if there are P0/P1 issues → **resolve them one by one from highest to lowest priority, and only work on the ROADMAP once all are cleared**
+2. If there are only P2 issues → you may work on ROADMAP tasks first, interleaving P2 fixes
+3. After resolving → move it to the "Resolved" section below, writing down the fix
+4. Ran into a new blocker during work → add it here immediately
 
 ---
 
-## 🟡 P1 — 高优先级
+## 🔴 P0 — Hard Blockers
 
-（暂无）
-
----
-
-## 🔵 P2 — 一般优先级
-
-（暂无）
+(None for now)
 
 ---
 
-## ✅ 已解决
+## 🟡 P1 — High Priority
 
-### ~~B-004: HiDPI 虚拟显示器触发系统镜像 UI + 鼠标移动卡顿~~
-- **解法**: `CGConfigureDisplayMirrorOfDisplay` 在 Apple Silicon 上会触发硬件镜像模式，这是死路。改为 BetterDisplay 同款的 plist override 方案：写 `scale-resolutions` 到 `/Library/Displays/Contents/Resources/Overrides/DisplayVendorID-XXXX/DisplayProductID-XXXX`，需要管理员权限（NSAppleScript），启用后重新连接显示器生效。已移除所有镜像相关代码（enableHiDPIVirtual/disableHiDPIVirtual/hiDPIMirrorMap 等）。
-- **解决日期**: 2026-03-05
-- **经验**: macOS HiDPI 方案只有两条路：(1) plist override（BetterDisplay 方案，需 admin + 重连）(2) CGVirtualDisplay 纯虚拟显示器（不与物理屏镜像）。❌ 绝对不要用 CGConfigureDisplayMirrorOfDisplay。
+(None for now)
 
-### ~~B-002: CGVirtualDisplay 是私有 API，无公开头文件~~
-- **解法**: 用户批准使用私有 API。已创建 FreeDisplay-Bridging-Header.h 声明 CGVirtualDisplay + IOAVService 接口，VirtualDisplayService 已实现完整的虚拟显示器创建/销毁功能。
-- **解决日期**: 2026-03-03
+---
 
-### ~~B-003: DDC 亮度控制对部分外接显示器无效~~
-- **解法**: 根因确认：DDCService 使用的 IOFramebuffer I2C API 在 Apple Silicon 上完全不工作。已添加 IOAVService ARM64 DDC 路径（通过 DCPAVServiceProxy 查找外接显示器），并添加 CGSetDisplayTransferByTable gamma table 软件亮度降级方案。
-- **解决日期**: 2026-03-03
+## 🔵 P2 — Normal Priority
 
-### ~~B-001: DisplayInfo.name 只显示 "Display N" 而非真实显示器名称~~
-- **解法**: 用 `IOServiceMatching("IODisplayConnect")` + `IODisplayCreateInfoDictionary` 枚举所有 IODisplayConnect 服务，通过 DisplayVendorID + DisplayProductID 匹配，从 DisplayProductName 字典取首个 locale 的产品名称；内建显示屏直接返回"内建显示屏"
-- **解决日期**: 2026-03-02
-- **经验**: IOKit CF 字典中的整数值可能是 Int 类型而非 UInt32，需要双类型尝试
+(None for now)
 
-### ~~B-000: GENERATE_INFOPLIST_FILE 缺失导致编译失败~~
-- **解法**: 在 project.yml settings 中添加 `GENERATE_INFOPLIST_FILE: YES`
-- **解决日期**: 2026-03-02
-- **经验**: xcodegen 不自动生成 Info.plist，需要显式启用
+---
 
-### ~~B-000b: DDCService static singleton Swift 6 并发报错~~
-- **解法**: 类标记 `@unchecked Sendable`，并在 project.yml 设置 `SWIFT_STRICT_CONCURRENCY: minimal`
-- **解决日期**: 2026-03-02
-- **经验**: Swift 6 严格并发检查下，singleton 需要显式标记 Sendable
+## ✅ Resolved
+
+### ~~B-004: HiDPI virtual display triggers the system mirroring UI + mouse movement stutter~~
+- **Fix**: `CGConfigureDisplayMirrorOfDisplay` triggers hardware mirroring mode on Apple Silicon, which is a dead end. Switched to the same plist override approach as BetterDisplay: write `scale-resolutions` to `/Library/Displays/Contents/Resources/Overrides/DisplayVendorID-XXXX/DisplayProductID-XXXX`, which requires administrator privileges (NSAppleScript); after enabling, reconnect the display for it to take effect. All mirroring-related code has been removed (enableHiDPIVirtual/disableHiDPIVirtual/hiDPIMirrorMap, etc.).
+- **Resolved on**: 2026-03-05
+- **Lesson**: There are only two HiDPI approaches on macOS: (1) plist override (the BetterDisplay approach, requires admin + reconnect) (2) a pure CGVirtualDisplay virtual display (does not mirror a physical screen). ❌ Never use CGConfigureDisplayMirrorOfDisplay.
+
+### ~~B-002: CGVirtualDisplay is a private API with no public header~~
+- **Fix**: The user approved use of the private API. Created FreeDisplay-Bridging-Header.h declaring the CGVirtualDisplay + IOAVService interfaces; VirtualDisplayService now implements full virtual display creation/destruction.
+- **Resolved on**: 2026-03-03
+
+### ~~B-003: DDC brightness control has no effect on some external displays~~
+- **Fix**: Root cause confirmed: the IOFramebuffer I2C API used by DDCService does not work at all on Apple Silicon. Added the IOAVService ARM64 DDC path (locating external displays via DCPAVServiceProxy), plus a CGSetDisplayTransferByTable gamma table software brightness fallback.
+- **Resolved on**: 2026-03-03
+
+### ~~B-001: DisplayInfo.name only shows "Display N" instead of the real display name~~
+- **Fix**: Use `IOServiceMatching("IODisplayConnect")` + `IODisplayCreateInfoDictionary` to enumerate all IODisplayConnect services, match by DisplayVendorID + DisplayProductID, and take the product name of the first locale from the DisplayProductName dictionary; the built-in display directly returns "Built-in Display"
+- **Resolved on**: 2026-03-02
+- **Lesson**: Integer values in IOKit CF dictionaries may be of type Int rather than UInt32, so both types must be attempted
+
+### ~~B-000: Missing GENERATE_INFOPLIST_FILE causes build failure~~
+- **Fix**: Added `GENERATE_INFOPLIST_FILE: YES` to project.yml settings
+- **Resolved on**: 2026-03-02
+- **Lesson**: xcodegen does not generate Info.plist automatically; it must be enabled explicitly
+
+### ~~B-000b: DDCService static singleton Swift 6 concurrency error~~
+- **Fix**: Marked the class `@unchecked Sendable` and set `SWIFT_STRICT_CONCURRENCY: minimal` in project.yml
+- **Resolved on**: 2026-03-02
+- **Lesson**: Under Swift 6 strict concurrency checking, singletons need an explicit Sendable marking

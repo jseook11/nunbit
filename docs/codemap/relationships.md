@@ -1,10 +1,10 @@
 # Module Relationships — FreeDisplay
 
-> 模块关系图、Services 内部依赖、数据流。快速参考见 [CLAUDE.md](CLAUDE.md)，文件树见 [file-tree.md](file-tree.md)。
+> Module relationship diagram, Services internal dependencies, data flow. See [CLAUDE.md](CLAUDE.md) for the quick reference and [file-tree.md](file-tree.md) for the file tree.
 
 ---
 
-## 模块关系图 / Module Relationship Diagram
+## Module Relationship Diagram
 
 ```
 App (FreeDisplayApp)
@@ -12,7 +12,7 @@ App (FreeDisplayApp)
         └── @Published [DisplayInfo]
               └── MenuBarView (@EnvironmentObject DisplayManager)
                     ├── DisplayRowView
-                    │     └── DisplayDetailView  ← 12 Sections（三组分组）
+                    │     └── DisplayDetailView  ← 12 Sections (three groups)
                     │           ├── BrightnessSliderView     → BrightnessService → DDCService
                     │           ├── ResolutionSliderView     → ResolutionService
                     │           ├── DisplayModeListView      → ResolutionService
@@ -24,7 +24,7 @@ App (FreeDisplayApp)
                     ├── ArrangementView          → ArrangementService
                     ├── VirtualDisplayView       → VirtualDisplayService
                     ├── AutoBrightnessView       → AutoBrightnessService → BrightnessService
-                    ├── LectureModeView          → SleepAssertionService (系统睡眠 assertion)
+                    ├── LectureModeView          → SleepAssertionService (system sleep assertion)
                     ├── HeadlessSessionView      → HeadlessSessionService
                     │                                → VirtualDisplayService / ArrangementService / SleepAssertionService
                     ├── SystemColorMenuEntry     → SystemColorView → SettingsService
@@ -33,62 +33,62 @@ App (FreeDisplayApp)
 
 ---
 
-## Services 层内部依赖 / Services Internal Dependencies
+## Services Internal Dependencies
 
 ```
-BrightnessService ──────────→ DDCService (外接屏 DDC 亮度读写)
-AutoBrightnessService ──────→ BrightnessService (映射 lux→亮度后调用)
-DisplayManager ─────────────→ BrightnessService (刷新时异步初始化亮度)
+BrightnessService ──────────→ DDCService (external display DDC brightness read/write)
+AutoBrightnessService ──────→ BrightnessService (called after mapping lux→brightness)
+DisplayManager ─────────────→ BrightnessService (async brightness init on refresh)
                ─────────────→ ArrangementService (setAsMainDisplay)
-               ─────────────→ arrangeExternalAboveBuiltin() (热插拔后自动定位外接屏)
+               ─────────────→ arrangeExternalAboveBuiltin() (auto positioning after hot-plug)
 
-CGHelpers (共享工具) ────────→ 被以下 Service 使用（WindowServer IPC 超时保护）:
-  ArrangementService (setPosition/setAsMainDisplay CG 事务)
-  MirrorService (enableMirror/disableMirror CG 事务)
-  ResolutionService (applyModeSync CG 事务)
-  VirtualDisplayService (CGVirtualDisplay apply 事务)
+CGHelpers (shared utility) ─→ used by the following Services (WindowServer IPC timeout protection):
+  ArrangementService (setPosition/setAsMainDisplay CG transaction)
+  MirrorService (enableMirror/disableMirror CG transaction)
+  ResolutionService (applyModeSync CG transaction)
+  VirtualDisplayService (CGVirtualDisplay apply transaction)
 
-GammaService (gamma 所有者) ─→ 唯一写入 CGSetDisplayTransferByFormula/Table 的 Service
-  BrightnessService ─────────→ GammaService (软件亮度通过 GammaService 写入，不直接写 CG)
-  ❌ View 层不得直接调 CGSetDisplayTransferByFormula/Table
-  ❌ 不得使用 CGDisplayRestoreColorSyncSettings()（全局），改用 GammaService.resetSingleDisplay(displayID)
+GammaService (gamma owner) ─→ the only Service that writes CGSetDisplayTransferByFormula/Table
+  BrightnessService ─────────→ GammaService (software brightness is written through GammaService, never directly to CG)
+  ❌ The View layer must not call CGSetDisplayTransferByFormula/Table directly
+  ❌ Must not use CGDisplayRestoreColorSyncSettings() (global); use GammaService.resetSingleDisplay(displayID) instead
 
-ResolutionService ──────────→ VirtualDisplayService.virtualDisplayID(for:) (镜像检测 fallback)
+ResolutionService ──────────→ VirtualDisplayService.virtualDisplayID(for:) (mirror detection fallback)
 
-HeadlessSessionService ─────→ VirtualDisplayService (创建/激活虚拟屏)
-                        ─────→ ArrangementService.setAsMainDisplay (单个事务平移布局)
-                        ─────→ SleepAssertionService (系统 + 显示器防睡眠)
+HeadlessSessionService ─────→ VirtualDisplayService (create/activate the virtual display)
+                        ─────→ ArrangementService.setAsMainDisplay (shift the layout in a single transaction)
+                        ─────→ SleepAssertionService (system + display sleep prevention)
 
-SleepAssertionService ──────→ IOPMAssertionCreateWithName (kernel 在进程退出时自动释放)
-  lecture owner       ─────→ 仅 PreventUserIdleSystemSleep
+SleepAssertionService ──────→ IOPMAssertionCreateWithName (the kernel releases it automatically on process exit)
+  lecture owner       ─────→ PreventUserIdleSystemSleep only
   headlessSession owner ───→ PreventUserIdleSystemSleep + PreventUserIdleDisplaySleep
 ```
 
 ---
 
-## 数据流 / Data Flow
+## Data Flow
 
 ```
-单向数据流（响应式）：
+Unidirectional data flow (reactive):
   CGDisplayAPI / IOKit → Services → DisplayInfo (@Published) → Views (reactive SwiftUI)
   User interaction    → Views   → Services → Hardware
 
-睡眠/唤醒数据流：
+Sleep/wake data flow:
   NSWorkspace.didWakeNotification → AppDelegate
     → GammaService.reapplyIfNeeded()
     → BrightnessService.reapplySoftwareBrightnessIfNeeded()
 
-热插拔数据流：
+Hot-plug data flow:
   CGDisplayRegisterReconfigurationCallback → DisplayManager.displayReconfigCallback
     → refreshDisplays()
     → arrangeExternalAboveBuiltin()
-    → @Published displays 更新 → 全局 View 重渲染
+    → @Published displays update → global View re-render
 
-虚拟显示器数据流：
+Virtual display data flow:
   VirtualDisplayView → VirtualDisplayService.create(config:)
-    → CGVirtualDisplay(descriptor:) [主线程，maxPixels = HiDPI ? 逻辑×2 : 逻辑]
-    → apply(settings) [后台，CGHelpers.runWithTimeout]
-    → 轮询 displayID + CGDisplayIsOnline（最多 5 秒）
-    → activeDisplayObjects 持有强引用；destroy = ARC 释放
-    → 无头会话：setAsMainDisplay → SleepAssertionService.acquire(.headlessSession)
+    → CGVirtualDisplay(descriptor:) [main thread, maxPixels = HiDPI ? logical×2 : logical]
+    → apply(settings) [background, CGHelpers.runWithTimeout]
+    → poll displayID + CGDisplayIsOnline (up to 5 seconds)
+    → activeDisplayObjects holds a strong reference; destroy = ARC release
+    → headless session: setAsMainDisplay → SleepAssertionService.acquire(.headlessSession)
 ```

@@ -1,62 +1,62 @@
-# Phase 21: 功能精简 — 删除无用功能
+# Phase 21: Feature Trimming — Removing Unused Features
 
-> 状态: 完成 | 预计: 中等复杂度
+> Status: Completed | Estimate: Medium complexity
 
-## 目标
+## Goal
 
-删除不实用的功能（旋转、串流/PiP、色彩模式反色、镜像 UI），精简代码库，减少维护负担。
+Remove impractical features (rotation, streaming/PiP, color mode inversion, mirror UI), slim down the codebase, and reduce maintenance burden.
 
-## 任务
+## Tasks
 
-### Task 1: 删除旋转功能
-- [x] 删除 `Services/RotationService.swift`
-- [x] 删除 `Views/RotationView.swift`
-- [x] `DisplayDetailView.swift`：移除 `showRotation` 状态、旋转 DetailRow、RotationView embed、loadExpanded/saveExpanded("rotation")
-- [x] `DisplayInfo.swift`：移除 `rotation: Double` 属性（grep 确认无其他引用）
-- [x] `ConfigProtectionService.swift`：移除 `RotationService.shared.setRotation` 调用（约 2 处）、`ProtectedItems.rotation` 字段、`DisplayConfig.rotation` 字段
-- [x] `ConfigProtectionView.swift`：移除旋转保护 toggle
+### Task 1: Remove the rotation feature
+- [x] Delete `Services/RotationService.swift`
+- [x] Delete `Views/RotationView.swift`
+- [x] `DisplayDetailView.swift`: remove the `showRotation` state, the rotation DetailRow, the RotationView embed, and loadExpanded/saveExpanded("rotation")
+- [x] `DisplayInfo.swift`: remove the `rotation: Double` property (confirmed via grep that nothing else references it)
+- [x] `ConfigProtectionService.swift`: remove the `RotationService.shared.setRotation` calls (about 2 places), the `ProtectedItems.rotation` field, and the `DisplayConfig.rotation` field
+- [x] `ConfigProtectionView.swift`: remove the rotation protection toggle
 
-**实现提示**: 先 grep `RotationService\|RotationView\|\.rotation` 找到所有引用，逐个清理。
+**Implementation hints**: First grep for `RotationService\|RotationView\|\.rotation` to find every reference, then clean them up one by one.
 
-### Task 2: 删除串流 + PiP + 视频滤镜
-- [x] 删除 `Services/ScreenCaptureService.swift`
-- [x] 删除 `ViewModels/StreamViewModel.swift`
-- [x] 删除 `Views/StreamControlView.swift`
-- [x] 删除 `Views/StreamWindow.swift`
-- [x] 删除 `Views/PiPControlView.swift`
-- [x] 删除 `Views/PiPWindow.swift`
-- [x] 删除 `Views/VideoFilterWindow.swift`
-- [x] `DisplayDetailView.swift`：移除 `showStream`、`showPiP` 状态 + 对应的 DetailRow + embed
-- [x] `MenuBarView.swift`：移除 VideoFilterMenuEntry、SystemColorMenuEntry（如有）
+### Task 2: Remove streaming + PiP + video filters
+- [x] Delete `Services/ScreenCaptureService.swift`
+- [x] Delete `ViewModels/StreamViewModel.swift`
+- [x] Delete `Views/StreamControlView.swift`
+- [x] Delete `Views/StreamWindow.swift`
+- [x] Delete `Views/PiPControlView.swift`
+- [x] Delete `Views/PiPWindow.swift`
+- [x] Delete `Views/VideoFilterWindow.swift`
+- [x] `DisplayDetailView.swift`: remove the `showStream` and `showPiP` states + their DetailRows + embeds
+- [x] `MenuBarView.swift`: remove VideoFilterMenuEntry and SystemColorMenuEntry (if present)
 
-**实现提示**: 这 7 个文件是孤岛，删除后 grep `ScreenCaptureService\|StreamViewModel\|StreamControlView\|PiPControlView\|PiPWindow\|VideoFilter` 确认无残留引用。
+**Implementation hints**: These 7 files are isolated islands; after deleting them, grep for `ScreenCaptureService\|StreamViewModel\|StreamControlView\|PiPControlView\|PiPWindow\|VideoFilter` to confirm no references remain.
 
-### Task 3: 删除色彩模式（反色/灰阶）和镜像 UI
-- [x] 删除 `Views/ColorModeView.swift`
-- [x] 删除 `Views/MirrorView.swift`（保留 `Services/MirrorService.swift`，HiDPI 依赖）
-- [x] `DisplayDetailView.swift`：移除 `showColorMode`、`showMirror` 状态 + 对应 DetailRow + embed
-- [x] `DisplayDetailView.swift`：清理 `colorModeDesc` 相关状态（`colorSpaceName` 保留，ColorProfile 需要）
+### Task 3: Remove color modes (inversion/grayscale) and the mirror UI
+- [x] Delete `Views/ColorModeView.swift`
+- [x] Delete `Views/MirrorView.swift` (keep `Services/MirrorService.swift`; HiDPI depends on it)
+- [x] `DisplayDetailView.swift`: remove the `showColorMode` and `showMirror` states + their DetailRows + embeds
+- [x] `DisplayDetailView.swift`: clean up the `colorModeDesc` related state (keep `colorSpaceName`; ColorProfile needs it)
 
-**实现提示**: MirrorService.swift 不能删！VirtualDisplayService 的 HiDPI 功能依赖 MirrorService.enableMirror/disableMirror。
+**Implementation hints**: MirrorService.swift must NOT be deleted! The HiDPI feature in VirtualDisplayService depends on MirrorService.enableMirror/disableMirror.
 
-### Task 4: 编译验证 + 清理
+### Task 4: Build verification + cleanup
 - [x] `xcodegen generate && xcodebuild -scheme FreeDisplay -configuration Debug build`
-- [x] 更新 `docs/CODEMAP.md`：移除已删除文件的记录
-- [x] 更新 `README.md`：从功能列表中移除已删除功能
-- [x] 更新 `CHANGELOG.md`：添加 v1.1.0 条目记录功能精简
+- [x] Update the code map under `docs/codemap/` to remove records of deleted files
+- [x] Update `README.md`: remove the deleted features from the feature list
+- [x] Update `CHANGELOG.md`: add a v1.1.0 entry documenting the feature trimming
 
-## 验收标准
+## Acceptance Criteria
 
 ```bash
-# 编译通过
+# Build passes
 xcodebuild -scheme FreeDisplay -configuration Debug build 2>&1 | tail -3
 
-# 确认文件已删除
+# Confirm the files are deleted
 ls FreeDisplay/Services/RotationService.swift 2>&1  # should not exist
 ls FreeDisplay/Views/RotationView.swift 2>&1         # should not exist
 ls FreeDisplay/Views/StreamControlView.swift 2>&1    # should not exist
 
-# 确认无残留引用
+# Confirm no references remain
 grep -r "RotationService\|RotationView\|StreamControlView\|PiPControlView\|ColorModeView\|MirrorView" FreeDisplay/ --include="*.swift" | grep -v "^Binary"
 # should return nothing
 ```

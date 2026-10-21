@@ -27,7 +27,7 @@ struct LectureModeView: View {
                 HStack(spacing: 6) {
                     MenuItemIcon(systemName: "play.rectangle.fill", color: .green)
                         .accessibilityHidden(true)
-                    Text("保持播放（防止系统睡眠）")
+                    Text("Keep Playing (Prevent System Sleep)")
                         .font(.body)
                 }
             }
@@ -40,7 +40,7 @@ struct LectureModeView: View {
                         .fill(Color.green)
                         .frame(width: 6, height: 6)
                         .accessibilityHidden(true)
-                    Text("系统保持唤醒；显示器可正常休眠")
+                    Text("System stays awake; displays can sleep normally")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -48,16 +48,16 @@ struct LectureModeView: View {
                 Button {
                     sleepDisplaysNow()
                 } label: {
-                    Label("立即关闭显示器", systemImage: "display")
+                    Label("Turn Off Display Now", systemImage: "display")
                         .font(.caption)
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .help("让显示器立即休眠，但 Mac 与播放继续运行；按键或移动鼠标即可唤醒")
+                .help("Put the display to sleep now while the Mac and playback keep running; press a key or move the mouse to wake it")
             }
 
-            Text("不会创建虚拟显示器，网课与 FairPlay/DRM 视频可正常播放。开启后可以等待显示器自动休眠，或点上面的按钮立即关屏；Mac 会保持唤醒并继续播放。")
+            Text("No virtual display is created, so online classes and FairPlay/DRM video play normally. Once enabled, either wait for the display to sleep on its own or click the button above to turn it off now; the Mac stays awake and keeps playing.")
                 .font(.caption2)
                 .foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

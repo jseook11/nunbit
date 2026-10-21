@@ -7,9 +7,9 @@
 ## Project Overview
 
 - **Name**: FreeDisplay
-- **Language**: Swift 6.0（并发检查设为 minimal）
+- **Language**: Swift 6.0 (concurrency checking set to minimal)
 - **Framework**: SwiftUI (MenuBarExtra) + AppKit
-- **Package Manager**: 无（零第三方依赖，全部系统框架）
+- **Package Manager**: None (zero third-party dependencies, all system frameworks)
 - **Build Tool**: XcodeGen (`project.yml`) + xcodebuild
 - **Minimum OS**: macOS 14.0
 - **Architecture**: MVVM — View → ViewModel → Service
@@ -19,107 +19,107 @@
 ### Layer Separation
 
 ```
-Views/          → UI 展示，只读 ViewModel 或直接读 Service（简单场景）
-ViewModels/     → 状态管理，桥接 View 与 Service
-Services/       → 业务逻辑，与系统框架（IOKit/CoreGraphics/DDC）交互
-Models/         → 纯数据结构（DisplayInfo、DisplayMode、DisplayPreset）
+Views/          → UI presentation, reads ViewModel only, or reads Service directly (simple cases)
+ViewModels/     → State management, bridges View and Service
+Services/       → Business logic, interacts with system frameworks (IOKit/CoreGraphics/DDC)
+Models/         → Pure data structures (DisplayInfo, DisplayMode, DisplayPreset)
 ```
 
-- View 层禁止直接调用 CoreGraphics / IOKit / CGSet* 系列 API
-- 写 gamma table 必须经过 GammaService，不得绕过
-- BrightnessService（软件亮度）通过 GammaService 写入，不直接调 CGSetDisplayTransferByTable
+- The View layer must not call CoreGraphics / IOKit / CGSet* family APIs directly
+- Writing a gamma table must go through GammaService; never bypass it
+- BrightnessService (software brightness) writes through GammaService and does not call CGSetDisplayTransferByTable directly
 
 ### Module Boundaries
 
-| 目录 | 职责 |
+| Directory | Responsibility |
 |------|------|
-| `FreeDisplay/Services/` | 所有系统级操作（DDC、亮度、分辨率、HiDPI、排列等） |
-| `FreeDisplay/Views/` | SwiftUI 视图，文件名格式：`XxxView.swift` 或 `XxxRow.swift` |
-| `FreeDisplay/ViewModels/` | 状态管理，与 View 1:1 或多 View 共享 |
-| `FreeDisplay/Models/` | 数据结构，无副作用 |
-| `FreeDisplay/Utilities/` | 通用工具函数 |
-| `FreeDisplay/Resources/` | 静态资源 |
-| `docs/` | 项目文档（不要改结构） |
-| `scripts/` | 构建和发布脚本 |
+| `FreeDisplay/Services/` | All system-level operations (DDC, brightness, resolution, HiDPI, arrangement, etc.) |
+| `FreeDisplay/Views/` | SwiftUI views, file name format: `XxxView.swift` or `XxxRow.swift` |
+| `FreeDisplay/ViewModels/` | State management, 1:1 with a View or shared across multiple Views |
+| `FreeDisplay/Models/` | Data structures, no side effects |
+| `FreeDisplay/Utilities/` | General-purpose helper functions |
+| `FreeDisplay/Resources/` | Static resources |
+| `docs/` | Project documentation (do not change the structure) |
+| `scripts/` | Build and release scripts |
 
 ### Protected Files
 
-以下文件修改前需明确说明原因：
+The following files require a clear explanation of the reason before modification:
 
-- `FreeDisplay/FreeDisplay.entitlements` — 权限声明，改动影响签名和 App Sandbox
-- `project.yml` — XcodeGen 配置，改后必须重新运行 `xcodegen generate`
-- `ExportOptions.plist` — 发布签名配置
-- `docs/roadmap/` — 规划文档，只更新 `[x]` 进度标记，不改结构
+- `FreeDisplay/FreeDisplay.entitlements` — permission declarations, changes affect signing and App Sandbox
+- `project.yml` — XcodeGen configuration, `xcodegen generate` must be re-run after changes
+- `ExportOptions.plist` — release signing configuration
+- `docs/roadmap/` — planning documents, only update `[x]` progress markers, do not change the structure
 
 ## Coding Standards
 
 ### Style Guide
 
-- Swift 6.0 语法，不得降级兼容写法
-- SwiftUI 视图优先，仅在必要时用 AppKit
-- 私有框架（CoreDisplay 等）必须用 `dlopen` + `dlsym` 运行时加载，禁止 `@_silgen_name`
+- Swift 6.0 syntax; do not fall back to compatibility-era idioms
+- Prefer SwiftUI views; use AppKit only when necessary
+- Private frameworks (CoreDisplay, etc.) must be loaded at runtime with `dlopen` + `dlsym`; `@_silgen_name` is forbidden
 
 ### Naming Conventions
 
-- Service 类：`XxxService.swift`，单例用 `static let shared`
-- View 文件：`XxxView.swift`
-- 可复用行组件：`XxxRow`（struct，支持 `@State`）
-- UserDefaults key：必须加 `fd.` 前缀（如 `fd.launchAtLogin`）
-- 禁止裸 key（如 `"launchAtLogin"`）
+- Service classes: `XxxService.swift`, singletons use `static let shared`
+- View files: `XxxView.swift`
+- Reusable row components: `XxxRow` (struct, supports `@State`)
+- UserDefaults keys: must carry the `fd.` prefix (e.g. `fd.launchAtLogin`)
+- Bare keys are forbidden (e.g. `"launchAtLogin"`)
 
 ### SwiftUI Component Rules
 
-- 需要本地状态（`isHovered`、`isLoading`）的行组件 → 必须是独立 `struct`
-- 禁止用 `@ViewBuilder` 函数承载带 `@State` 的组件
+- Row components that need local state (`isHovered`, `isLoading`) → must be a standalone `struct`
+- Do not carry components with `@State` inside a `@ViewBuilder` function
 
 ### Concurrency Rules
 
-- Swift 6 并发报错 → 优先用 `@MainActor` 或 `@unchecked Sendable`
-- 长期 C 回调（如 CGDisplayRegisterReconfigurationCallback）→ 用 `Unmanaged.passRetained(self)`，注销时 `release()`
-- 禁止 `passUnretained`（野指针风险）
-- 只对真正慢的操作做 async（文件系统扫描、网络请求）；微秒级 IOKit 调用保持同步
+- Swift 6 concurrency errors → prefer `@MainActor` or `@unchecked Sendable`
+- Long-lived C callbacks (e.g. CGDisplayRegisterReconfigurationCallback) → use `Unmanaged.passRetained(self)`, `release()` on deregistration
+- `passUnretained` is forbidden (dangling pointer risk)
+- Only make genuinely slow operations async (filesystem scans, network requests); keep microsecond-level IOKit calls synchronous
 
 ## Testing Requirements
 
 ### Verification Commands
 
 ```bash
-# 编译检查（Debug）— 每次改完必跑
-cd ~/Desktop/FreeDisplay && xcodebuild -scheme FreeDisplay -configuration Debug build 2>&1 | tail -20
+# Compile check (Debug) — must run after every change
+xcodebuild -scheme FreeDisplay -configuration Debug build 2>&1 | tail -20
 
-# 联动检查（改了接口/模型时）
+# Coupling check (when interfaces/models change)
 grep -r "DisplayInfo\|DisplayManager\|DDCService" FreeDisplay/ --include="*.swift" | grep -v "^Binary"
 
-# 重新生成 xcodeproj（改了 project.yml 时必跑）
-cd ~/Desktop/FreeDisplay && xcodegen generate
+# Regenerate xcodeproj (must run when project.yml changes)
+xcodegen generate
 
-# Release 构建 + 打包 DMG
-cd ~/Desktop/FreeDisplay && ./build.sh
+# Release build + DMG packaging
+./build.sh
 ```
 
 ### Test Coverage
 
-- 本项目无自动化测试套件（硬件依赖性强，手动测试为主）
-- 新增 DDC 功能必须在实际外接显示器上手动验证
-- 新增 HiDPI 功能需重连显示器验证生效
+- This project has no automated test suite (strongly hardware-dependent, manual testing is the norm)
+- New DDC features must be manually verified on a real external display
+- New HiDPI features require reconnecting the display to verify they take effect
 
 ## Git Discipline
 
 ### Branch Naming
 
-- `feature/xxx` — 新功能
-- `fix/xxx` — bug 修复
-- `refactor/xxx` — 重构
-- `phase-N/xxx` — 对应 ROADMAP Phase 的改动
+- `feature/xxx` — new feature
+- `fix/xxx` — bug fix
+- `refactor/xxx` — refactor
+- `phase-N/xxx` — changes corresponding to a ROADMAP Phase
 
 ### Commit Message Format
 
-遵循 Conventional Commits：
+Follow Conventional Commits:
 
 ```
-feat: 添加自动亮度调节功能
-fix: 修复 HiDPI plist 写入权限问题
-refactor: 提取 GammaService 统一管理 transfer function
+feat: add auto brightness adjustment
+fix: fix HiDPI plist write permission issue
+refactor: extract GammaService to centralize transfer function management
 ```
 
 ### Co-Author Line
@@ -130,47 +130,47 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 
 ## Forbidden Operations
 
-- Do NOT: 直接调用 `CGSetDisplayTransferByTable` / `CGSetDisplayTransferByFormula`（绕过 GammaService）
-- Do NOT: 调用 `CGDisplayRestoreColorSyncSettings()`（全局重置）— 用 `GammaService.resetSingleDisplay(displayID)`
-- Do NOT: 用 `CGConfigureDisplayMirrorOfDisplay` 实现 HiDPI（Apple Silicon 会触发硬件镜像+鼠标卡顿）
-- Do NOT: 用 `@_silgen_name` 引用私有框架符号（链接时 undefined symbol）
-- Do NOT: 用 `CGDisplayVendorNumber/ModelNumber` 匹配 IOKit 服务（对部分显示器不可靠）
-- Do NOT: 在 plist 中设 `DisplayProductName`（覆盖系统显示器名称）
-- Do NOT: 修改 `docs/roadmap/` 目录结构
-- Do NOT: 新增第三方依赖（项目方针：零依赖）
-- Do NOT: 在 View 层直接访问系统框架底层 API
+- Do NOT: call `CGSetDisplayTransferByTable` / `CGSetDisplayTransferByFormula` directly (bypasses GammaService)
+- Do NOT: call `CGDisplayRestoreColorSyncSettings()` (global reset) — use `GammaService.resetSingleDisplay(displayID)`
+- Do NOT: use `CGConfigureDisplayMirrorOfDisplay` to implement HiDPI (Apple Silicon triggers hardware mirroring + mouse stutter)
+- Do NOT: reference private framework symbols with `@_silgen_name` (undefined symbol at link time)
+- Do NOT: match IOKit services using `CGDisplayVendorNumber/ModelNumber` (unreliable on some displays)
+- Do NOT: set `DisplayProductName` in a plist (overrides the system display name)
+- Do NOT: modify the `docs/roadmap/` directory structure
+- Do NOT: add third-party dependencies (project policy: zero dependencies)
+- Do NOT: access low-level system framework APIs directly in the View layer
 
 ## Agent-Specific Notes
 
-### 开工检查清单
+### Kickoff Checklist
 
-1. 先读 `docs/BLOCKING.md`，有 P0/P1 先解决
-2. 读 `docs/roadmap/CLAUDE.md` 了解当前 Phase
-3. 读 `docs/codemap/CLAUDE.md` → `docs/codemap/file-tree.md` 定位相关文件
+1. Read `docs/BLOCKING.md` first; resolve any P0/P1 issues before anything else
+2. Read `docs/ROADMAP.md` to understand the current Phase
+3. Read `docs/codemap/CLAUDE.md` → `docs/codemap/file-tree.md` to locate the relevant files
 
-### 改完联动检查
+### Post-Change Coupling Checks
 
-- 改了 `DisplayInfo` 属性 → grep 所有引用点同步更新
-- 改了 `project.yml` → 必须运行 `xcodegen generate`
-- 新增 Service/View 文件 → 更新 `docs/codemap/file-tree.md`
-- Phase 任务完成 → 在 `docs/roadmap/phase-N.md` 和 `docs/ROADMAP.md` 同时标 `[x]`
-- 踩了坑 → 写到 `docs/lessons/{topic}.md` 并更新索引
-- 睡眠/唤醒相关改动 → 确认 Service 响应 `NSWorkspace.didWakeNotification`
+- Changed a `DisplayInfo` property → grep all reference sites and update them
+- Changed `project.yml` → must run `xcodegen generate`
+- Added a Service/View file → update `docs/codemap/file-tree.md`
+- Completed a Phase task → mark `[x]` in both `docs/roadmap/phase-N.md` and `docs/ROADMAP.md`
+- Hit a pitfall → write it to `docs/lessons/{topic}.md` and update the index
+- Sleep/wake related changes → confirm the Service responds to `NSWorkspace.didWakeNotification`
 
-### 需要停下来问用户的情况
+### Situations That Require Stopping to Ask the User
 
-- 需要使用新的私有 API（CoreDisplay 等）
-- 需要 SIP 关闭或特殊系统权限
-- 架构方向变更（MVVM 改为其他模式）
+- Needing to use a new private API (CoreDisplay, etc.)
+- Needing SIP disabled or special system permissions
+- Architecture direction change (MVVM to another pattern)
 
-### 核心框架速查
+### Core Framework Quick Reference
 
-| 框架 | 用途 |
+| Framework | Purpose |
 |------|------|
-| CoreGraphics | 显示器枚举、分辨率、排列 |
-| IOKit | DDC/CI I2C 通信、亮度/对比度 |
-| ColorSync | ICC Profile 管理 |
-| CGVirtualDisplay (私有) | 虚拟显示器，vendorID 必须非零，主线程调用 |
-| CoreDisplay (dlsym) | 内建屏亮度读取 |
+| CoreGraphics | Display enumeration, resolution, arrangement |
+| IOKit | DDC/CI I2C communication, brightness/contrast |
+| ColorSync | ICC Profile management |
+| CGVirtualDisplay (private) | Virtual display, vendorID must be non-zero, call on the main thread |
+| CoreDisplay (dlsym) | Built-in display brightness reading |
 
 <!-- Generated by Harness Engineering system on 2026-03-12. Review and customize. -->

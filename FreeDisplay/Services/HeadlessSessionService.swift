@@ -52,7 +52,7 @@ final class HeadlessSessionService: ObservableObject {
 
         let virtualDisplays = VirtualDisplayService.shared
         guard let config = virtualDisplays.configs.first(where: { $0.id == configID }) else {
-            errorMessage = "找不到虚拟显示器配置"
+            errorMessage = "Virtual display configuration not found"
             return false
         }
 
@@ -64,7 +64,7 @@ final class HeadlessSessionService: ObservableObject {
         let wasOnline = virtualDisplays.isOnline(configID)
         if !wasOnline {
             guard await virtualDisplays.create(config: config) else {
-                errorMessage = "虚拟显示器创建失败"
+                errorMessage = "Failed to create virtual display"
                 return false
             }
         }
@@ -72,7 +72,7 @@ final class HeadlessSessionService: ObservableObject {
         guard let virtualID = virtualDisplays.displayID(for: configID),
               virtualDisplays.isOnline(configID) else {
             if !wasOnline { _ = virtualDisplays.destroy(configID: configID) }
-            errorMessage = "虚拟显示器未上线"
+            errorMessage = "Virtual display did not come online"
             return false
         }
 
@@ -87,7 +87,7 @@ final class HeadlessSessionService: ObservableObject {
             try? await Task.sleep(nanoseconds: 300_000_000)
             guard await ArrangementService.shared.setAsMainDisplay(virtualID) else {
                 await rollbackStart(configID: configID)
-                errorMessage = "无法把虚拟显示器设为主屏"
+                errorMessage = "Could not set the virtual display as the main display"
                 return false
             }
             return await finishStart(configID: configID)
@@ -102,7 +102,7 @@ final class HeadlessSessionService: ObservableObject {
             reason: "FreeDisplay headless session"
         ) else {
             await rollbackStart(configID: configID)
-            errorMessage = "无法阻止系统睡眠"
+            errorMessage = "Could not prevent system sleep"
             return false
         }
 

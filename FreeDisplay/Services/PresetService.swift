@@ -209,7 +209,7 @@ final class PresetService: ObservableObject, @unchecked Sendable {
         }
         guard !externals.isEmpty else { return [] }
 
-        // --- 原生模式 ---
+        // --- Native Mode ---
         let nativeEntries: [DisplayPresetEntry] = externals.map { display in
             let nativeMode: DisplayMode? = display.availableModes
                 .filter { !$0.isHiDPI }
@@ -228,7 +228,7 @@ final class PresetService: ObservableObject, @unchecked Sendable {
         }
 
         var nativePreset = DisplayPreset(
-            name: "原生模式",
+            name: "Native Mode",
             icon: "rectangle.on.rectangle",
             displays: nativeEntries
         )
@@ -236,7 +236,7 @@ final class PresetService: ObservableObject, @unchecked Sendable {
 
         var result: [DisplayPreset] = [nativePreset]
 
-        // --- HiDPI 模式 ---
+        // --- HiDPI Mode ---
         // Find the best HiDPI mode for each external display (highest logical resolution)
         let hasExternalWithHiDPI = externals.contains { display in
             display.availableModes.contains { $0.isHiDPI }
@@ -273,7 +273,7 @@ final class PresetService: ObservableObject, @unchecked Sendable {
                 }
             }
             var hidpiPreset = DisplayPreset(
-                name: "HiDPI 模式",
+                name: "HiDPI Mode",
                 icon: "sparkles",
                 displays: hidpiEntries
             )

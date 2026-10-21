@@ -12,7 +12,7 @@ struct MainDisplayView: View {
             if display.isMain {
                 HStack {
                     MenuItemIcon(systemName: "m.circle.fill", color: .blue)
-                    Text("当前主显示屏")
+                    Text("Current Main Display")
                         .font(.body)
                     Spacer()
                 }
@@ -21,7 +21,7 @@ struct MainDisplayView: View {
             } else {
                 HStack {
                     MenuItemIcon(systemName: "m.circle.fill", color: .blue)
-                    Text("设为主显示屏")
+                    Text("Set as Main Display")
                         .font(.body)
                     Spacer()
                 }
@@ -36,7 +36,7 @@ struct MainDisplayView: View {
                             display.displayID
                         )
                         if !success {
-                            errorMessage = "设置主显示屏失败"
+                            errorMessage = "Failed to set the main display"
                             Task { @MainActor in
                                 try? await Task.sleep(nanoseconds: 3_000_000_000)
                                 errorMessage = nil

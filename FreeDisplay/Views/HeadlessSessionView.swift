@@ -21,12 +21,12 @@ struct HeadlessSessionView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if virtualDisplays.configs.isEmpty {
-                Text("请先在「虚拟显示器」中创建一个配置。")
+                Text("Create a configuration in Virtual Display first.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             } else {
                 HStack(spacing: 6) {
-                    Text("虚拟显示器")
+                    Text("Virtual Display")
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .frame(width: 64, alignment: .leading)
@@ -48,7 +48,7 @@ struct HeadlessSessionView: View {
                             .fill(Color.green)
                             .frame(width: 6, height: 6)
                             .accessibilityHidden(true)
-                        Text("运行中 · 虚拟屏为主屏 · 防睡眠已开启")
+                        Text("Running · Virtual display is main · Sleep prevention on")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -58,7 +58,7 @@ struct HeadlessSessionView: View {
                             await session.stop()
                         }
                     } label: {
-                        Label(session.isStopping ? "结束中…" : "结束无头会话", systemImage: "stop.fill")
+                        Label(session.isStopping ? "Stopping…" : "End Headless Session", systemImage: "stop.fill")
                             .font(.caption)
                             .frame(maxWidth: .infinity)
                     }
@@ -78,7 +78,7 @@ struct HeadlessSessionView: View {
                                     .scaleEffect(0.6)
                                     .frame(width: 12, height: 12)
                             }
-                            Text(session.isStarting ? "启动中…" : "开始无头会话")
+                            Text(session.isStarting ? "Starting…" : "Start Headless Session")
                         }
                         .font(.caption)
                         .frame(maxWidth: .infinity)
@@ -94,7 +94,7 @@ struct HeadlessSessionView: View {
                         .foregroundColor(.red)
                 }
 
-                Text("开始会话会创建并启用所选虚拟显示器，并把它设为主屏。然后把游戏窗口拖到这块新显示的屏幕上，再按物理显示器的电源键关屏。会话期间系统与显示器不会休眠；结束时恢复原主屏，并关闭本次创建的虚拟显示器。")
+                Text("Starting a session creates and enables the selected virtual display and makes it the main display. Drag the game window onto this new screen, then press the power button on the physical display to turn it off. The system and displays will not sleep during the session. When you end it, the original main display is restored and the virtual display created for this session is turned off.")
                     .font(.caption2)
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
