@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// "自动亮度" section — follows builtin screen brightness and adjusts external display brightness automatically.
+/// "Auto Brightness" section — follows built-in screen brightness and adjusts external display brightness automatically.
 struct AutoBrightnessView: View {
     @StateObject private var service = AutoBrightnessService.shared
     @State private var isHovered = false
@@ -16,7 +16,7 @@ struct AutoBrightnessView: View {
             HStack {
                 MenuItemIcon(systemName: "sun.max.trianglebadge.exclamationmark", color: service.isEnabled ? .orange : .secondary)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("自动亮度")
+                    Text("Auto Brightness")
                         .font(.body)
                     Text(statusText)
                         .font(.caption2)
@@ -27,7 +27,10 @@ struct AutoBrightnessView: View {
                     .toggleStyle(.switch)
                     .labelsHidden()
                     .controlSize(.small)
-                    .disabled(builtinUnavailable)
+                    // Only block *enabling* when there is no built-in display to follow.
+                    // An already-enabled toggle must always stay clickable, otherwise the
+                    // persisted setting can never be turned off again (e.g. on a Mac mini).
+                    .disabled(builtinUnavailable && !service.isEnabled)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
@@ -38,12 +41,14 @@ struct AutoBrightnessView: View {
     }
 
     private var statusText: String {
-        if builtinUnavailable {
-            return "未检测到内建显示屏"
-        } else if service.isEnabled {
-            return "跟随内建屏亮度同步中"
+        if service.isEnabled {
+            return builtinUnavailable
+                ? "Enabled, but no built-in display detected (paused)"
+                : "Syncing with built-in display brightness"
+        } else if builtinUnavailable {
+            return "No built-in display detected"
         } else {
-            return "跟随内建屏亮度调整外接显示器"
+            return "Match external displays to built-in display brightness"
         }
     }
 }

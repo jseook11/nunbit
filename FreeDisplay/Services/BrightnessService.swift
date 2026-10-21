@@ -172,21 +172,26 @@ final class BrightnessService: @unchecked Sendable {
                 displayID: displayID,
                 command: DDCService.brightnessVCP
             ) { [weak self] result in
-                guard let self else { return }
-                if let result = result, result.max > 0 {
-                    let brightness = Double(result.current) / Double(result.max) * 100.0
-                    self.ddcAvailableLock.lock()
-                    self.ddcAvailable[displayID] = true
-                    self.ddcMaxBrightness[displayID] = result.max
-                    self.ddcAvailableLock.unlock()
-                    Task { @MainActor in display.brightness = brightness }
-                } else {
-                    // DDC read returned nil; mark unavailable
-                    self.ddcAvailableLock.lock()
-                    if self.ddcAvailable[displayID] == nil {
-                        self.ddcAvailable[displayID] = false
+                // DDCService calls this back on its own queue; hop to the main actor
+                // before touching MainActor-isolated state.
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    if let result = result, result.max > 0 {
+                        let brightness = Double(result.current) / Double(result.max) * 100.0
+                        self.ddcAvailableLock.withLock {
+                            self.ddcAvailable[displayID] = true
+                            self.ddcMaxBrightness[displayID] = result.max
+                        }
+                        display.brightness = brightness
+                    } else {
+                        // No usable Get VCP reply. Some monitors accept Set VCP (so
+                        // brightness writes work) but never answer reads, so do NOT mark
+                        // DDC unavailable here — write success/failure decides that.
+                        // The write path assumes a 0–100 range when max is unknown.
+                        #if DEBUG
+                        print("[BrightnessService] no usable DDC read for display \(displayID); assuming 0–100 range")
+                        #endif
                     }
-                    self.ddcAvailableLock.unlock()
                 }
             }
         }
@@ -201,6 +206,10 @@ final class BrightnessService: @unchecked Sendable {
         // Record manual adjust time so auto-brightness can honour the cooldown period.
         if !isAutoAdjust {
             manualAdjustLock.withLock { lastManualAdjustDate = Date() }
+            // Persist the user's intent. Some monitors never answer DDC reads, so the
+            // hardware value cannot be read back; without this the slider would restart
+            // at 50% on every launch and jump on the first drag.
+            SettingsService.shared.setBrightness(clamped, for: displayID)
         }
 
         if isBuiltin {
@@ -234,18 +243,20 @@ final class BrightnessService: @unchecked Sendable {
                 command: DDCService.brightnessVCP,
                 value: ddcValue
             ) { [weak self] success in
-                guard let self else { return }
-                if success {
-                    self.ddcAvailableLock.withLock { self.ddcAvailable[displayID] = true }
-                } else {
-                    self.ddcAvailableLock.withLock { self.ddcAvailable[displayID] = false }
-                    // Apply gamma-based software brightness as fallback (must be on main thread)
-                    DispatchQueue.main.async { [weak self] in
-                        self?.setSoftwareBrightness(clamped, for: displayID)
+                // DDCService calls this back on its own queue; hop to the main actor
+                // before touching MainActor-isolated state.
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    if success {
+                        self.ddcAvailableLock.withLock { self.ddcAvailable[displayID] = true }
+                    } else {
+                        self.ddcAvailableLock.withLock { self.ddcAvailable[displayID] = false }
+                        // Apply gamma-based software brightness as fallback.
+                        self.setSoftwareBrightness(clamped, for: displayID)
+                        #if DEBUG
+                        print("[BrightnessService] DDC unavailable for display \(displayID), using software fallback")
+                        #endif
                     }
-                    #if DEBUG
-                    print("[BrightnessService] DDC unavailable for display \(displayID), using software fallback")
-                    #endif
                 }
             }
         }
@@ -276,6 +287,7 @@ final class BrightnessService: @unchecked Sendable {
 
         if !isAutoAdjust {
             manualAdjustLock.withLock { lastManualAdjustDate = Date() }
+            SettingsService.shared.setBrightness(clamped, for: displayID)
         }
 
         let anim = animator(for: displayID)
@@ -315,18 +327,20 @@ final class BrightnessService: @unchecked Sendable {
                         command: DDCService.brightnessVCP,
                         value: ddcValue
                     ) { [weak self] success in
-                        guard let self else { return }
-                        if success {
-                            self.ddcAvailableLock.withLock { self.ddcAvailable[displayID] = true }
-                        } else if isLast {
-                            // DDC failed — mark unavailable and apply software fallback
-                            self.ddcAvailableLock.withLock { self.ddcAvailable[displayID] = false }
-                            DispatchQueue.main.async { [weak self] in
-                                self?.setSoftwareBrightness(clamped, for: displayID)
+                        // DDCService calls this back on its own queue; hop to the main actor
+                        // before touching MainActor-isolated state.
+                        Task { @MainActor [weak self] in
+                            guard let self else { return }
+                            if success {
+                                self.ddcAvailableLock.withLock { self.ddcAvailable[displayID] = true }
+                            } else if isLast {
+                                // DDC failed — mark unavailable and apply software fallback
+                                self.ddcAvailableLock.withLock { self.ddcAvailable[displayID] = false }
+                                self.setSoftwareBrightness(clamped, for: displayID)
+                                #if DEBUG
+                                print("[BrightnessService] smooth DDC failed for \(displayID), using software fallback")
+                                #endif
                             }
-                            #if DEBUG
-                            print("[BrightnessService] smooth DDC failed for \(displayID), using software fallback")
-                            #endif
                         }
                     }
                 }

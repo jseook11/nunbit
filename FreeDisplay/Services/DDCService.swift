@@ -372,6 +372,25 @@ final class DDCService: ObservableObject, @unchecked Sendable {
         //  replyBuf[10] = checksum
         guard replyBuf.count >= 10 else { return nil }
 
+        // Validate the reply before trusting it. IOAVServiceReadI2C can return
+        // kIOReturnSuccess while handing back stale/unrelated bytes when the display
+        // does not answer Get VCP (DDC/CI disabled in the monitor OSD, or the monitor
+        // implements Set VCP only). Parsing those bytes yielded nonsense ranges such
+        // as max=63915, and every later brightness write was scaled far out of range,
+        // so the slider moved but the panel never changed.
+        guard replyBuf[0] == 0x6E,                 // source address (host)
+              (replyBuf[1] & 0x7F) == 0x08,        // payload length: 8 data bytes
+              replyBuf[2] == 0x02,                 // Get VCP Feature Reply opcode
+              replyBuf[3] == 0x00,                 // result code: no error
+              replyBuf[4] == command               // echoed VCP opcode
+        else {
+            #if DEBUG
+            let raw = replyBuf.map { String(format: "%02x", $0) }.joined(separator: " ")
+            print("[DDCService] ARM64 read VCP 0x\(String(command, radix: 16)): invalid reply \(raw)")
+            #endif
+            return nil
+        }
+
         let maxVal = (UInt16(replyBuf[6]) << 8) | UInt16(replyBuf[7])
         let curVal = (UInt16(replyBuf[8]) << 8) | UInt16(replyBuf[9])
         #if DEBUG
@@ -619,11 +638,16 @@ final class DDCService: ObservableObject, @unchecked Sendable {
 
     /// Asynchronously write a VCP value, retrying up to 3 times.
     /// Invalidates the cache for the written VCP code on success.
+    ///
+    /// `completion` is main-actor isolated and is always delivered on the main actor:
+    /// every caller updates `@MainActor` display state from it. Calling it directly
+    /// on `ddcQueue` would trap in Swift 6 (`dispatch_assert_queue` / EXC_BREAKPOINT)
+    /// because closures that are not `@Sendable` inherit the caller's main-actor isolation.
     func writeAsync(
         displayID: CGDirectDisplayID,
         command: UInt8,
         value: UInt16,
-        completion: ((Bool) -> Void)? = nil
+        completion: (@MainActor (Bool) -> Void)? = nil
     ) {
         ddcQueue.async {
             for attempt in 0..<3 {
@@ -632,27 +656,35 @@ final class DDCService: ObservableObject, @unchecked Sendable {
                     self.cacheLock.lock()
                     self.vcpCache[displayID]?[command] = nil
                     self.cacheLock.unlock()
-                    completion?(true)
+                    if let completion {
+                        Task { @MainActor in completion(true) }
+                    }
                     return
                 }
                 if attempt < 2 { Thread.sleep(forTimeInterval: 0.05) }
             }
-            completion?(false)
+            if let completion {
+                Task { @MainActor in completion(false) }
+            }
         }
     }
 
     /// Asynchronously read a VCP value.
     /// Returns a cached result if available and not expired (5-second TTL).
+    ///
+    /// `completion` is main-actor isolated and is always delivered on the main actor
+    /// (see `writeAsync`): callers mutate `@MainActor` display state from it.
     func readAsync(
         displayID: CGDirectDisplayID,
         command: UInt8,
-        completion: @escaping ((current: UInt16, max: UInt16)?) -> Void
+        completion: @escaping @MainActor ((current: UInt16, max: UInt16)?) -> Void
     ) {
         // Fast path: return cached value if still fresh
         cacheLock.lock()
         if let entry = vcpCache[displayID]?[command], !entry.isExpired {
             cacheLock.unlock()
-            completion((current: entry.current, max: entry.max))
+            let result: (current: UInt16, max: UInt16)? = (current: entry.current, max: entry.max)
+            Task { @MainActor in completion(result) }
             return
         }
         cacheLock.unlock()
@@ -666,12 +698,12 @@ final class DDCService: ObservableObject, @unchecked Sendable {
                         current: r.current, max: r.max, timestamp: Date()
                     )
                     self.cacheLock.unlock()
-                    completion(r)
+                    Task { @MainActor in completion(r) }
                     return
                 }
                 if attempt < 2 { Thread.sleep(forTimeInterval: 0.05) }
             }
-            completion(nil)
+            Task { @MainActor in completion(nil) }
         }
     }
 

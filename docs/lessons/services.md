@@ -1,91 +1,98 @@
-# 踩坑经验 — 跨 Service 协作 / 并发 / 资源管理
+# Lessons Learned — Cross-Service Collaboration / Concurrency / Resource Management
 
-> 更新: 2026-03-05
+> Updated: 2026-03-05
 
-## 功能交互 / 跨 Service 协作（Round 3-4 优化）
+## Feature Interaction / Cross-Service Collaboration (Round 3-4 Optimization)
 
-### L-008: 两个 Service 写同一 CoreGraphics 资源会互相覆盖
-- **现象**: 设置 gamma 调整后拖动亮度滑块，gamma 效果消失（或反之）
-- **原因**: GammaService 和 BrightnessService 都调用 CGSetDisplayTransfer*，后调用的完全覆盖前者
-- **解法**: 指定 GammaService 为唯一写入者；BrightnessService 把亮度因子存入 softwareBrightnessFactors，GammaService 在 applyFormula 里读取并乘入 rHi/gHi/bHi
-- **教训**: 两个 Service 共享底层资源时，必须指定唯一所有者，其他方通过接口影响而不是直接写
-- **日期**: 2026-03-04
+### L-008: Two services writing the same CoreGraphics resource overwrite each other
+- **Symptom**: After setting a gamma adjustment, dragging the brightness slider makes the gamma effect disappear (or vice versa)
+- **Cause**: Both GammaService and BrightnessService call CGSetDisplayTransfer*, and the later call completely overwrites the former
+- **Fix**: Designate GammaService as the sole writer; BrightnessService stores the brightness factor in softwareBrightnessFactors, and GammaService reads it in applyFormula and multiplies it into rHi/gHi/bHi
+- **Lesson**: When two services share an underlying resource, you must designate a single owner, and other parties must influence it through an interface rather than writing directly
+- **Date**: 2026-03-04
 
-### L-009: macOS 睡眠/唤醒会重置所有 CGSetDisplayTransfer* 效果
-- **现象**: gamma 调整和软件亮度在 Mac 睡眠后全部丢失
-- **原因**: macOS 睡眠时重置 display transfer function 到系统默认值，CGSetDisplayTransfer* 效果不持久
-- **解法**: 注册 NSWorkspace.didWakeNotification，唤醒后延迟 500ms 对所有显示器重新 apply
-- **教训**: 写 display 硬件状态的功能都必须考虑睡眠唤醒后重置，测试要覆盖此场景
-- **日期**: 2026-03-04
+### L-009: macOS sleep/wake resets all CGSetDisplayTransfer* effects
+- **Symptom**: Gamma adjustments and software brightness are all lost after the Mac sleeps
+- **Cause**: On sleep, macOS resets the display transfer function to the system default, so CGSetDisplayTransfer* effects are not persistent
+- **Fix**: Register for NSWorkspace.didWakeNotification, and re-apply to all displays 500ms after wake
+- **Lesson**: Any feature that writes display hardware state must account for reset after sleep/wake, and testing must cover this scenario
+- **Date**: 2026-03-04
 
-### L-010: CGDisplayRegisterReconfigurationCallback 必须用 passRetained
-- **现象**: 理论 crash 风险：C 回调访问悬空指针
-- **原因**: passUnretained 不增加引用计数，self 被释放后回调访问悬空指针
-- **解法**: passRetained + 配对 release（在 stopMonitoring/deinit 里）
-- **教训**: 传给 C 回调的 self 指针一律用 passRetained，项目中已出现两次（DisplayManager + ConfigProtectionService）
-- **日期**: 2026-03-04
+### L-010: CGDisplayRegisterReconfigurationCallback must use passRetained
+- **Symptom**: Theoretical crash risk: the C callback accesses a dangling pointer
+- **Cause**: passUnretained does not increase the reference count, so if self is deallocated the callback accesses a dangling pointer
+- **Fix**: passRetained + paired release (in stopMonitoring/deinit)
+- **Lesson**: Always use passRetained for a self pointer passed to a C callback; this has already occurred twice in the project (DisplayManager + ConfigProtectionService)
+- **Date**: 2026-03-04
 
-### L-011: AutoBrightness 与手动调节必须有 cooldown 机制
-- **现象**: 手动调亮度 2 秒后被 AutoBrightness 覆盖
-- **原因**: applyBrightness 只检查差值，没有"用户最近手动操作"保护
-- **解法**: setBrightness 增加 isAutoAdjust 参数，手动调用时记录 lastManualAdjustDate，AutoBrightness 检查 30s cooldown
-- **教训**: 自动调节功能必须有手动干预后的暂停机制
-- **日期**: 2026-03-04
+### L-011: AutoBrightness and manual adjustment must have a cooldown mechanism
+- **Symptom**: A manual brightness adjustment is overridden by AutoBrightness 2 seconds later
+- **Cause**: applyBrightness only checks the difference and has no protection for "the user recently adjusted manually"
+- **Fix**: Add an isAutoAdjust parameter to setBrightness; record lastManualAdjustDate on manual calls, and have AutoBrightness check a 30s cooldown
+- **Lesson**: Automatic adjustment features must have a pause mechanism after manual intervention
+- **Date**: 2026-03-04
 
-## 并发 / 资源管理（Round 5 优化）
+## Concurrency / Resource Management (Round 5 Optimization)
 
-### L-012: GammaService activeAdjustments 字典必须加锁
-- **现象**: 数据竞争风险——BrightnessService 从 background queue 读 hasActiveAdjustment，GammaService 从 MainActor 写 activeAdjustments
-- **原因**: 字典无同步保护，多线程并发读写是 Swift 的 undefined behavior（可能崩溃或数据损坏）
-- **解法**: 新增 NSLock，所有 activeAdjustments 读写都加锁（hasActiveAdjustment/apply/reapply/reset 等）
-- **教训**: 凡是被多个 Actor 访问的可变状态，无论是否当前触发了 race，都必须加锁
-- **日期**: 2026-03-04
+### L-012: GammaService's activeAdjustments dictionary must be locked
+- **Symptom**: Data race risk — BrightnessService reads hasActiveAdjustment from a background queue while GammaService writes activeAdjustments from the MainActor
+- **Cause**: The dictionary has no synchronization protection; concurrent reads and writes from multiple threads are undefined behavior in Swift (may crash or corrupt data)
+- **Fix**: Add an NSLock and lock all activeAdjustments reads and writes (hasActiveAdjustment/apply/reapply/reset, etc.)
+- **Lesson**: Any mutable state accessed by multiple actors must be locked, whether or not a race has currently been triggered
+- **Date**: 2026-03-04
 
-### L-013: GammaService 量化路径必须同步 brightness factor
-- **现象**: 软件亮度在量化模式（quantizationLevels < 256）下静默失效
-- **原因**: applyFormula 读取 softwareBrightness factor，applyQuantizedTable 没有读取，两路径不一致
-- **解法**: applyQuantizedTable 同样读取 brightnessFactor 并缩放 rHi/gHi/bHi
-- **教训**: 同一 Service 有多条执行路径时，所有路径都必须应用相同的修改逻辑
-- **日期**: 2026-03-04
+### L-013: GammaService's quantized path must apply the brightness factor too
+- **Symptom**: Software brightness silently stops working in quantized mode (quantizationLevels < 256)
+- **Cause**: applyFormula reads the softwareBrightness factor, but applyQuantizedTable does not; the two paths are inconsistent
+- **Fix**: applyQuantizedTable must also read brightnessFactor and scale rHi/gHi/bHi
+- **Lesson**: When a single service has multiple execution paths, all paths must apply the same modification logic
+- **Date**: 2026-03-04
 
-### L-014: 睡眠唤醒时 BrightnessService 必须在 GammaService 之前 reapply
-- **现象**: 屏幕唤醒时短暂闪白（满亮度）后才恢复
-- **原因**: 先调 GammaService.reapply 时 softwareBrightnessFactors 尚未恢复，applyFormula 读到 1.0 写入硬件
-- **解法**: 唤醒时先 BrightnessService.reapply，再 GammaService.reapply（确保 factor 已就绪）
-- **教训**: 有依赖关系的 reapply 必须按依赖顺序调用；BrightnessService 是 GammaService 的数据提供方
-- **日期**: 2026-03-04
+### L-014: On sleep/wake, BrightnessService must reapply before GammaService
+- **Symptom**: On screen wake there is a brief white flash (full brightness) before it recovers
+- **Cause**: When GammaService.reapply was called first, softwareBrightnessFactors had not yet been restored, so applyFormula read 1.0 and wrote that to the hardware
+- **Fix**: On wake, call BrightnessService.reapply first, then GammaService.reapply (ensuring the factor is ready)
+- **Lesson**: Reapply operations with dependencies must be called in dependency order; BrightnessService is the data provider for GammaService
+- **Date**: 2026-03-04
 
-### L-015: NSWindow 关闭必须停止关联的 SCStream
-- **现象**: 用户点 PiP/Stream 窗口的红色关闭按钮，串流仍在后台运行耗资源
-- **原因**: NSWindowController 未实现 NSWindowDelegate.windowWillClose，关闭事件不触发 stopCapture
-- **解法**: PiPWindowController/StreamWindowController 实现 windowWillClose → viewModel.stopCapture()，同时设 window.delegate = self
-- **教训**: 系统提供的关闭入口（红色按钮）和 app 内关闭按钮都要清理资源，不能只处理其中一个
-- **日期**: 2026-03-04
+### L-015: Closing an NSWindow must stop the associated SCStream
+- **Symptom**: When the user clicks the red close button of the PiP/Stream window, the stream keeps running in the background and consumes resources
+- **Cause**: NSWindowController did not implement NSWindowDelegate.windowWillClose, so the close event did not trigger stopCapture
+- **Fix**: Have PiPWindowController/StreamWindowController implement windowWillClose → viewModel.stopCapture(), and also set window.delegate = self
+- **Lesson**: Both system-provided close entry points (the red button) and in-app close buttons must clean up resources; handling only one of them is not enough
+- **Date**: 2026-03-04
 
-### L-016: 遍历 Dictionary 时禁止同时调用 removeValue
-- **现象**: NotchOverlayManager.screenParametersChanged() 遍历 overlayWindows 时调用 removeValue，潜在崩溃
-- **原因**: Swift Dictionary 不支持在 for-in 迭代过程中修改自身，行为未定义
-- **解法**: 收集待删 key 到临时数组，循环外统一删除
-- **教训**: 任何 for-in 遍历集合时，不能对该集合做增删操作（同语言里的 ConcurrentModificationException 等价问题）
-- **日期**: 2026-03-04
+### L-016: Never call removeValue while iterating a Dictionary
+- **Symptom**: NotchOverlayManager.screenParametersChanged() called removeValue while iterating overlayWindows, a potential crash
+- **Cause**: Swift Dictionary does not support mutating itself during a for-in iteration; the behavior is undefined
+- **Fix**: Collect the keys to delete in a temporary array and remove them all after the loop
+- **Lesson**: When doing a for-in iteration over any collection, you must not add or remove elements from that collection (the same class of problem as ConcurrentModificationException in other languages)
+- **Date**: 2026-03-04
 
-### L-017: UserDefaults key 必须有应用命名空间前缀
-- **现象**: SettingsService/AutoBrightnessService/ConfigProtectionService 用裸 key（如 "launchAtLogin"）
-- **原因**: 裸 key 可能与 macOS 系统 defaults 或未来第三方库冲突，导致读到意外值或覆盖系统设置
-- **解法**: 统一加 `fd.` 前缀（fd.launchAtLogin, fd.AutoBrightnessEnabled 等）
-- **教训**: UserDefaults key 命名规范：`<app_prefix>.<key>`
-- **日期**: 2026-03-04
+### L-017: UserDefaults keys must have an app namespace prefix
+- **Symptom**: SettingsService/AutoBrightnessService/ConfigProtectionService used bare keys (such as "launchAtLogin")
+- **Cause**: A bare key may collide with macOS system defaults or a future third-party library, causing an unexpected value to be read or a system setting to be overwritten
+- **Fix**: Add a `fd.` prefix uniformly (fd.launchAtLogin, fd.AutoBrightnessEnabled, etc.)
+- **Lesson**: UserDefaults key naming convention: `<app_prefix>.<key>`
+- **Date**: 2026-03-04
 
-### L-018: Mirror source/target API 查询方向
-- **现象**: refreshMirrorState 用 CGDisplayMirrorsDisplay(source) 查询，永远返回 nil（source 不克隆任何人）
-- **原因**: CGDisplayMirrorsDisplay(X) 返回"X 克隆的目标"，而 SOURCE 本身不是克隆者
-- **解法**: 反向查询——遍历所有显示器，找 CGDisplayMirrorsDisplay(candidate) == source 的那个（即 target）
-- **教训**: Mirror API 语义：SOURCE 是被克隆的，TARGET 才是克隆者；查询应该从 TARGET 视角（"谁在克隆我"）
-- **日期**: 2026-03-04
+### L-018: Mirror source/target API query direction
+- **Symptom**: refreshMirrorState queries with CGDisplayMirrorsDisplay(source) and always returns nil (source does not clone anyone)
+- **Cause**: CGDisplayMirrorsDisplay(X) returns "the target that X clones", but SOURCE itself is not the cloner
+- **Fix**: Query in reverse — iterate all displays and find the one where CGDisplayMirrorsDisplay(candidate) == source (i.e. the target)
+- **Lesson**: Mirror API semantics: SOURCE is the one being cloned, and TARGET is the cloner; the query should be made from the TARGET's perspective ("who is cloning me")
+- **Date**: 2026-03-04
 
-### L-019: IOPMAssertion 必须先 release 再创建新 assertion
-- **现象**: ManageDisplayView 每次打开防睡眠开关都泄漏一个 IOPMAssertion，旧 ID 被覆盖无法 release
-- **原因**: createSleepAssertion() 未检查 sleepAssertionID != 0，直接覆盖
-- **解法**: 创建前先 release 旧 assertion；onDisappear 只在 !preventSleep 时 release（保持开关 ON 时持续生效）
-- **教训**: 系统资源（IOPMAssertion、IO iterator 等）必须严格配对 create/release，覆盖 ID 前先 release 旧的
-- **日期**: 2026-03-04
+### L-019: IOPMAssertion must be released before creating a new assertion
+- **Symptom**: Every time the prevent-sleep toggle in ManageDisplayView is turned on, one IOPMAssertion leaks; the old ID is overwritten and can no longer be released
+- **Cause**: createSleepAssertion() did not check sleepAssertionID != 0 and simply overwrote it
+- **Fix**: Release the old assertion before creating a new one; in onDisappear only release when !preventSleep (so it stays in effect while the toggle is ON)
+- **Lesson**: System resources (IOPMAssertion, IO iterators, etc.) must strictly pair create/release; release the old one before overwriting an ID
+- **Date**: 2026-03-04
+
+### L-032: Never call a main-actor closure from a background queue
+- **Symptom**: Dragging the brightness slider for an external display in the menu bar instantly kills the app (the whole process exits, not just the panel)
+- **Cause**: `BrightnessService.setBrightness` is `@MainActor`, so its non-`@Sendable` completion handed to `DDCService.writeAsync` inherited main-actor isolation — but `writeAsync` invoked it on `com.freedisplay.ddc`. Swift 6's runtime isolation check called `dispatch_assert_queue`, which fails with SIGTRAP (EXC_BREAKPOINT). The same latent crash existed in `setBrightnessSmooth` (write completion) and `refreshBrightness` (`readAsync` completion).
+- **Fix**: Declare the DDC completion parameters `@MainActor` and deliver them with `Task { @MainActor in completion(...) }` from `ddcQueue`, never by calling them directly on that queue.
+- **Lesson**: A non-`@Sendable` closure parameter inherits the isolation of the enclosing context. If the callee runs it on another queue, Swift 6 traps at runtime even though the code compiles. Either mark the parameter `@Sendable` (and keep the body nonisolated) or mark it `@MainActor` and hop explicitly.
+- **Date**: 2026-10-21
