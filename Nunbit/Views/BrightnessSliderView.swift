@@ -3,13 +3,23 @@ import Combine
 
 struct BrightnessSliderView: View {
     @ObservedObject var display: DisplayInfo
-    @State private var localBrightness: Double = 50
+    @State private var localBrightness: Double
     @State private var isDragging: Bool = false
     @State private var valueHighlighted: Bool = false
     @State private var highlightTask: Task<Void, Never>?
     @State private var ddcStatus: Bool? = nil  // nil=unknown, true=DDC, false=Software
     /// Throttle DDC writes during drag to ~100ms intervals.
     @State private var lastDDCWrite: Date = .distantPast
+
+    init(display: DisplayInfo) {
+        self.display = display
+        // Read the built-in panel synchronously when the view is created (i.e. when the
+        // menu opens) so the first rendered frame shows the real value, not the default 50.
+        let initial = display.isBuiltin
+            ? (BrightnessService.shared.currentBuiltinBrightnessPercent(for: display.displayID) ?? display.brightness)
+            : display.brightness
+        _localBrightness = State(initialValue: initial)
+    }
 
     var body: some View {
         VStack(spacing: 2) {
@@ -120,7 +130,7 @@ struct BrightnessSliderView: View {
             if display.isBuiltin {
                 await BrightnessService.shared.refreshBrightness(for: display)
             }
-            localBrightness = display.brightness
+            if !isDragging { localBrightness = display.brightness }
             updateDDCStatus()
 
             // Keep following external changes while the panel is visible. The task is
@@ -147,10 +157,23 @@ struct BrightnessSliderView: View {
 
 struct CombinedBrightnessView: View {
     let displays: [DisplayInfo]
-    @State private var combinedBrightness: Double = 50
+    @State private var combinedBrightness: Double
     @State private var isDragging: Bool = false
     /// Throttle DDC writes during drag to ~100ms intervals.
     @State private var lastDDCWrite: Date = .distantPast
+
+    init(displays: [DisplayInfo]) {
+        self.displays = displays
+        // Seed the first frame from the real values instead of flashing 50%.
+        let values = displays.map { display -> Double in
+            if display.isBuiltin,
+               let current = BrightnessService.shared.currentBuiltinBrightnessPercent(for: display.displayID) {
+                return current
+            }
+            return display.brightness
+        }
+        _combinedBrightness = State(initialValue: values.isEmpty ? 50 : values.reduce(0, +) / Double(values.count))
+    }
 
     private var averageBrightness: Double {
         guard !displays.isEmpty else { return 50 }

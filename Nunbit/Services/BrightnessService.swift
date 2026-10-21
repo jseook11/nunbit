@@ -165,6 +165,15 @@ final class BrightnessService: @unchecked Sendable {
 
     // MARK: - Public API
 
+    /// Synchronous brightness (0–100) for the built-in display, used to seed the UI before
+    /// its first render so the slider does not flash its default value. A DisplayServices
+    /// read is microsecond-level, so running it on the main thread is safe.
+    func currentBuiltinBrightnessPercent(for displayID: CGDirectDisplayID) -> Double? {
+        guard CGDisplayIsBuiltin(displayID) != 0,
+              let value = DisplayServicesBrightness.get(displayID) else { return nil }
+        return Double(value) * 100.0
+    }
+
     @MainActor
     func refreshBrightness(for display: DisplayInfo) async {
         let isBuiltin = display.isBuiltin
