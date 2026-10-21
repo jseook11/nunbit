@@ -45,10 +45,48 @@ final class AutoBrightnessService: ObservableObject, @unchecked Sendable {
     /// Used by the UI to distinguish "not polled yet" from "no builtin display found".
     @Published private(set) var hasPolled: Bool = false
 
+    /// Physical external displays the last sync pass targeted. 0 means there is nothing to
+    /// sync to — the panel says so instead of pretending it is working.
+    @Published private(set) var syncTargetCount: Int = 0
+
     // MARK: - Private
 
     private var pollingTask: Task<Void, Never>?
     private let pollingInterval: TimeInterval = 2.0  // seconds
+
+    // MARK: - Launch
+
+    /// Resolves the singleton at launch so a persisted "on" starts polling even when the
+    /// user never opens the Auto Brightness section. `MenuBarExtra` content is built
+    /// lazily, and relying on that section is the same failure mode as wake recovery:
+    /// the feature silently did nothing after a relaunch until the panel was opened.
+    func activateAtLaunch() {
+        if isEnabled { startPolling() }
+        refreshBuiltinBrightnessOnce()
+    }
+
+    /// One-off built-in brightness read, used while polling is off (or before the first
+    /// poll) so the panel can show the current value.
+    func refreshBuiltinBrightnessOnce() {
+        Task.detached { [weak self] in
+            guard let self else { return }
+            let value = self.readBuiltinBrightness()
+            await MainActor.run {
+                self.builtinBrightness = value ?? 0
+                self.hasPolled = true
+            }
+        }
+    }
+
+    private nonisolated static func builtinDisplayID() -> CGDirectDisplayID? {
+        var count: UInt32 = 0
+        CGGetActiveDisplayList(0, nil, &count)
+        guard count > 0 else { return nil }
+
+        var displays = [CGDirectDisplayID](repeating: 0, count: Int(count))
+        CGGetActiveDisplayList(count, &displays, &count)
+        return displays.prefix(Int(count)).first { CGDisplayIsBuiltin($0) != 0 }
+    }
 
     // MARK: - Builtin Brightness
 
@@ -56,16 +94,7 @@ final class AutoBrightnessService: ObservableObject, @unchecked Sendable {
     /// Returns a value in 0.0–1.0, or nil if no builtin display is found.
     /// Safe to call from a background thread.
     nonisolated func readBuiltinBrightness() -> Double? {
-        var displayCount: UInt32 = 0
-        CGGetActiveDisplayList(0, nil, &displayCount)
-        guard displayCount > 0 else { return nil }
-
-        var displays = [CGDirectDisplayID](repeating: 0, count: Int(displayCount))
-        CGGetActiveDisplayList(displayCount, &displays, &displayCount)
-
-        guard let builtinID = displays.first(where: { CGDisplayIsBuiltin($0) != 0 }) else {
-            return nil
-        }
+        guard let builtinID = Self.builtinDisplayID() else { return nil }
 
         // DisplayServices first: on macOS 26 CoreDisplay_Display_GetUserBrightness has been
         // observed returning a stale 1.0 while DisplayServices reports the real panel value.
@@ -119,8 +148,23 @@ final class AutoBrightnessService: ObservableObject, @unchecked Sendable {
 
     @MainActor
     private func applyBrightness(builtin: Double?) async {
-        builtinBrightness = builtin ?? 0
+        // Publish only meaningful changes: this runs every 2 s and the panel observing it
+        // would otherwise re-render on every identical poll.
+        let reading = builtin ?? 0
+        if abs(builtinBrightness - reading) >= 0.005 {
+            builtinBrightness = reading
+        }
         hasPolled = true
+
+        // Only sync to physical external displays: the built-in panel drives the reading,
+        // and a virtual display has no backlight to adjust. Report the count so the panel
+        // can say "nothing to sync to" instead of implying it is working.
+        let targets = DisplayManagerAccessor.shared.displays.filter {
+            !$0.isBuiltin && !VirtualDisplayService.shared.isVirtualDisplay($0.displayID)
+        }
+        if syncTargetCount != targets.count {
+            syncTargetCount = targets.count
+        }
 
         guard let builtin, builtin > 0 else { return }
 
@@ -134,13 +178,7 @@ final class AutoBrightnessService: ObservableObject, @unchecked Sendable {
         }
 
         let targetPercentage = min(100.0, max(0.0, builtin * sensitivity * 100.0))
-
-        let snapshot = DisplayManagerAccessor.shared.displays
-        for display in snapshot {
-            // Only sync to physical external displays: the built-in panel drives the
-            // reading, and a virtual display has no backlight to adjust.
-            guard !display.isBuiltin else { continue }
-            guard !VirtualDisplayService.shared.isVirtualDisplay(display.displayID) else { continue }
+        for display in targets {
             let current = display.brightness
             if abs(current - targetPercentage) >= 2.0 {
                 await BrightnessService.shared.setBrightness(targetPercentage, for: display, isAutoAdjust: true)

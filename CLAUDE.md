@@ -108,6 +108,12 @@ Tech stack: Swift 6 + SwiftUI (MenuBarExtra) + IOKit + CoreGraphics, zero third-
 - `CoreDisplay_Display_GetUserBrightness` can return a stale `1.0` on macOS 26; never treat it as authoritative when DisplayServices answers
 - ❌ Do not route built-in brightness through DDC or through the gamma fallback when DisplayServices succeeds — gamma dimming does not change the backlight
 
+> **Auto Brightness (mandatory):**
+- It mirrors the built-in panel's *brightness value* to physical external displays; macOS's own auto-brightness already shows up in that value, so the system setting never needs to be read (there is no reliable API for it — L-045)
+- ❌ Never leave the service to be created by `MenuBarExtra` content: a persisted "on" must be activated at launch from `AppDelegate` (`AutoBrightnessService.shared.activateAtLaunch()`), otherwise it does nothing after a relaunch until that panel is opened (L-045)
+- Virtual displays are never sync targets (no backlight)
+- The section is shown only when it has both a source and a target: an **active built-in display** (the ALS panel; every Mac with one has an ambient-light sensor, and there is no supported API to query the sensor itself) **and** a physical external display. Mac mini / clamshell → hidden
+
 > **Stop and ask the user:**
 - Needing to use a private API (CoreDisplay, etc.)
 - Needing SIP disabled or special system permissions

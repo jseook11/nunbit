@@ -88,6 +88,29 @@ struct MenuBarView: View {
         displayManager.displays
     }
 
+    /// Auto Brightness only writes to physical external displays: the built-in panel is the
+    /// source of the reading and a virtual display has no backlight. With none connected
+    /// there is nothing to control, so the section is hidden instead of shown dead.
+    private var hasPhysicalExternalDisplay: Bool {
+        displayManager.displays.contains {
+            !$0.isBuiltin && !virtualDisplayService.isVirtualDisplay($0.displayID)
+        }
+    }
+
+    /// The source has to be an active built-in panel. That panel is also what carries the
+    /// ambient-light sensor: every Mac with a built-in display has one, while a Mac mini or a
+    /// clamshell MacBook has no ALS and no brightness to follow. There is no supported API to
+    /// query the sensor itself, so "active built-in panel" is the practical equivalent.
+    private var hasBuiltInBrightnessSource: Bool {
+        displayManager.displays.contains {
+            $0.isBuiltin && CGDisplayIsActive($0.displayID) != 0 && CGDisplayIsAsleep($0.displayID) == 0
+        }
+    }
+
+    private var showsAutoBrightness: Bool {
+        hasBuiltInBrightnessSource && hasPhysicalExternalDisplay
+    }
+
     var body: some View {
         VStack(spacing: 0) {
         ScrollView(.vertical, showsIndicators: false) {
@@ -179,18 +202,20 @@ struct MenuBarView: View {
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
 
-                // Auto Brightness entry (Phase 11)
-                ExpandableRow(
-                    icon: "sun.and.horizon.fill",
-                    iconColor: .orange,
-                    label: "Auto Brightness",
-                    isExpanded: $showAutoBrightness
-                )
+                // Auto Brightness entry (Phase 11) — only when there is a source and a target.
+                if showsAutoBrightness {
+                    ExpandableRow(
+                        icon: "sun.and.horizon.fill",
+                        iconColor: .orange,
+                        label: "Auto Brightness",
+                        isExpanded: $showAutoBrightness
+                    )
 
-                if showAutoBrightness {
-                    AutoBrightnessView()
-                        .padding(.leading, 8)
-                        .transition(.opacity.combined(with: .move(edge: .top)))
+                    if showAutoBrightness {
+                        AutoBrightnessView()
+                            .padding(.leading, 8)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
                 }
 
                 // Lecture Mode (personal branch): prevents sleep only, no virtual display

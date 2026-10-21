@@ -19,6 +19,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, @unchecked Sendable {
         // Start intercepting brightness keys to route them to the display under the cursor.
         BrightnessKeyService.shared.start()
 
+        // Auto Brightness lives in a singleton that the menu content only creates when the
+        // section is expanded. Resolve it at launch so a persisted "on" actually polls on a
+        // login launch — same lazy-content trap as the wake-recovery observers above.
+        Task { @MainActor in
+            AutoBrightnessService.shared.activateAtLaunch()
+        }
+
         // Display-state recovery (displays, software brightness, gamma, saved mode) is
         // owned by DisplayManager, which observes didWakeNotification itself. Wiring it
         // up from here via a closure assigned by the SwiftUI menu content meant it never

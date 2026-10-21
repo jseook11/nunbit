@@ -42,6 +42,13 @@
 - **Lesson**: `@Observable` tracks property access, not object identity — but only if each row reads the property itself. Passing values through a container body re-introduces whole-panel invalidation.
 - **Date**: 2026-10-21
 
+### L-045: A launch-time feature must be resolved at launch, not by `MenuBarExtra` content
+- **Symptom**: Auto Brightness was enabled (persisted `fd.AutoBrightnessEnabled = 1`), yet external displays never followed the built-in panel — and after every relaunch nothing happened at all until the user expanded the Auto Brightness section once.
+- **Cause**: `AutoBrightnessService.shared` was first touched only inside `AutoBrightnessView`, and that view exists only while its section is expanded. `MenuBarExtra` builds its content lazily, so the singleton (and the `startPolling()` its `loadPrefs` triggers) did not exist on a login launch. Same failure mode as wiring wake recovery from a `.task`.
+- **Fix**: `AppDelegate.applicationDidFinishLaunching` calls `AutoBrightnessService.shared.activateAtLaunch()` on the main actor, so a persisted "on" starts polling immediately; the view only reads and displays state.
+- **Lesson**: Ask "who creates this singleton?" for every background feature. If the only reference is inside menu/SwiftUI content, the feature has no runtime until the user opens that panel. Also: this is *not* a persistence bug — the saved value was correct the whole time, it was just never acted on.
+- **Date**: 2026-10-21
+
 ### L-044: Time-to-first-paint — render cached state immediately, keep the common path small
 - **Symptom**: After removing the hardware write and the spring animation, opening Image Adjustment still felt a few hundred milliseconds late. An external `sample` showed `FluidSpringAnimation` down from 229 samples to 4, but `NSHostingView.layout` + text drawing + slider creation remained in the first run-loop turn.
 - **Cause**: thirteen AppKit-backed `Slider`s were constructed before the panel could paint; the `MenuBarExtra` window cannot display anything until that layout finishes. Animating a tall subtree made it worse by re-laying it out every frame.
