@@ -1,6 +1,6 @@
 .DS_Store
 build/
-FreeDisplay.dmg
+*.dmg
 .autopilot/
 *.xcodeproj/xcuserdata/
 *.xcodeproj/project.xcworkspace/xcuserdata/
