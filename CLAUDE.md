@@ -76,7 +76,9 @@ Tech stack: Swift 6 + SwiftUI (MenuBarExtra) + IOKit + CoreGraphics, zero third-
 > **IOKit display matching:**
 - Do not match IOKit services using CGDisplayVendorNumber/ModelNumber (unreliable on some displays)
 - Use `NSScreen.localizedName` for the display name
-- Use IOServiceGetMatchingServices to enumerate IODisplayConnect for IOKit service lookup (❌ CGDisplayIOServicePort is deprecated)
+- Use IOServiceGetMatchingServices to enumerate IODisplayConnect for IOKit service lookup (❌ CGDisplayIOServicePort is deprecated; it returns 0 on macOS 26)
+- ❌ Never pair a `DCPAVServiceProxy` (IOAVService) to a display by vendor/model or by enumeration index — the DCPEXT ancestor chain exposes no vendor/product, and two identical panels then get each other's DDC controls
+- ✅ Match the AV service by EDID: `CoreDisplay_DisplayCreateInfoDictionary(displayID)` → `IODisplayLocation` → framebuffer `"EDID UUID"`, compared with `IOAVServiceCopyEDID` (see L-046)
 - DDC external brightness control is not always available → the UI must degrade gracefully (notify the user when detection fails)
 
 > **Async principles:**

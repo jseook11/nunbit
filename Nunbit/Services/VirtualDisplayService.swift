@@ -58,7 +58,9 @@ final class VirtualDisplayService: ObservableObject, @unchecked Sendable {
     private var autoCreateTask: Task<Void, Never>?
 
     private let configsKey = "fd.VirtualDisplayConfigs"
-    private static let virtualVendorID: UInt32 = 0xEEEE
+    /// Vendor ID stamped on every virtual display. `nonisolated` so display-matching code
+    /// that runs off the main actor (DDCService) can tell virtual displays apart too.
+    nonisolated static let virtualVendorID: UInt32 = 0xEEEE
     private static let maxDimension = 16_384
     private static let pixelsPerInch: Double = 110.0
 

@@ -8,6 +8,37 @@ import IOKit.graphics
 @_silgen_name("CGDisplayIOServicePort")
 private func CGDisplayIOServicePort(_ display: CGDirectDisplayID) -> io_service_t
 
+#if arch(arm64)
+// MARK: - Private APIs used to match an AV service to a display
+
+/// `CoreDisplay_DisplayCreateInfoDictionary` (CoreDisplay.framework, private).
+///
+/// This is the only remaining public-facing bridge from a `CGDirectDisplayID` to its
+/// framebuffer: `CGDisplayIOServicePort` returns 0 on macOS 26. The dictionary's
+/// `IODisplayLocation` is the IORegistry path of the framebuffer that drives the display.
+private typealias DisplayInfoDictionaryFn = @convention(c) (CGDirectDisplayID) -> Unmanaged<CFDictionary>?
+
+private let coreDisplayInfoDictionary: DisplayInfoDictionaryFn? = {
+    guard let handle = dlopen("/System/Library/Frameworks/CoreDisplay.framework/CoreDisplay", RTLD_LAZY),
+          let symbol = dlsym(handle, "CoreDisplay_DisplayCreateInfoDictionary")
+    else { return nil }
+    return unsafeBitCast(symbol, to: DisplayInfoDictionaryFn.self)
+}()
+
+/// `IOAVServiceCopyEDID` (IOKit). Bound dynamically like the other private symbols so a
+/// missing symbol degrades to the old matching path instead of failing at launch.
+private typealias CopyEDIDFn = @convention(c) (
+    UnsafeMutableRawPointer?, UnsafeMutablePointer<Unmanaged<CFData>?>?
+) -> IOReturn
+
+private let ioAVServiceCopyEDID: CopyEDIDFn? = {
+    guard let handle = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_LAZY),
+          let symbol = dlsym(handle, "IOAVServiceCopyEDID")
+    else { return nil }
+    return unsafeBitCast(symbol, to: CopyEDIDFn.self)
+}()
+#endif
+
 /// DDC/CI I2C communication service for external displays.
 /// Supports two hardware paths:
 ///   - ARM64 (Apple Silicon): IOAVService via DCPAVServiceProxy
@@ -55,15 +86,20 @@ final class DDCService: ObservableObject, @unchecked Sendable {
     /// and we fall back to index-based AVService assignment.
     @Published var mappingWarning: String? = nil
 
-    /// Attempts to match an IOAVService (DCPAVServiceProxy) to a CGDirectDisplayID by
-    /// comparing IORegistry properties against CoreGraphics display attributes.
+    /// Attempts to match an IOAVService (DCPAVServiceProxy) to a CGDirectDisplayID.
     ///
     /// Matching strategy (in order of reliability):
-    ///   1. Walk up the IORegistry parent chain from the DCPAVServiceProxy node to find a node
+    ///   1. Match by EDID. Every physical unit has its own EDID (manufacture date, serial
+    ///      descriptor, checksum), so this is the only strategy that can tell two identical
+    ///      monitors apart. The display's EDID UUID comes from its framebuffer (via
+    ///      CoreDisplay's info dictionary), the service's from `IOAVServiceCopyEDID`.
+    ///   2. Walk up the IORegistry parent chain from the DCPAVServiceProxy node to find a node
     ///      that has both "DisplayVendorID" and "DisplayProductID", then compare against
     ///      CGDisplayVendorNumber / CGDisplayModelNumber for each external display.
-    ///   2. If no vendor/product match is found, fall back to sorted-index assignment and
-    ///      emit a console warning (and set mappingWarning if >1 external display).
+    ///   3. If neither finds a match, fall back to sorted-index assignment and emit a console
+    ///      warning (and set mappingWarning if >1 external display). Index assignment cannot
+    ///      distinguish identical panels: it pairs the AV services with whichever display IDs
+    ///      happen to sort first, which silently swaps their brightness controls.
     ///
     /// Returns a dictionary mapping each matched external CGDirectDisplayID to its AVService.
     private func buildAVServiceMap(
@@ -76,21 +112,54 @@ final class DDCService: ObservableObject, @unchecked Sendable {
         CGGetOnlineDisplayList(displayCount, &displayIDs, &displayCount)
         let externalIDs = (0..<Int(displayCount))
             .map { displayIDs[$0] }
-            .filter { CGDisplayIsBuiltin($0) == 0 }
+            .filter {
+                CGDisplayIsBuiltin($0) == 0 &&
+                CGDisplayVendorNumber($0) != VirtualDisplayService.virtualVendorID
+            }
 
         guard !externalIDs.isEmpty else { return [:] }
 
         var result: [CGDirectDisplayID: IOAVServiceRef] = [:]
-        var unmatchedServices: [(service: IOAVServiceRef, ioEntry: io_service_t)] = []
+        var unmatchedServices = workingServices
 
-        // Strategy 1: IORegistry property matching
-        for entry in workingServices {
+        // Strategy 1: EDID matching. Unlike vendor/product, the EDID differs per physical
+        // unit even when two identical monitors are connected, so this is what keeps
+        // brightness controls on the right panel.
+        let displayEDIDs = onlineDisplayEDIDUUIDs()
+        if !displayEDIDs.isEmpty {
+            var serviceByEDID: [String: IOAVServiceRef] = [:]
+            for entry in unmatchedServices {
+                guard let uuid = avServiceEDIDUUID(entry.service) else { continue }
+                serviceByEDID[uuid] = entry.service
+            }
+
+            var usedServices: [IOAVServiceRef] = []
+            for displayID in externalIDs {
+                guard let uuid = displayEDIDs[displayID],
+                      let service = serviceByEDID[uuid],
+                      !usedServices.contains(where: { $0 == service })
+                else { continue }
+                result[displayID] = service
+                usedServices.append(service)
+                #if DEBUG
+                print("[DDCService] ARM64: matched AVService to display \(displayID) by EDID \(uuid)")
+                #endif
+            }
+
+            unmatchedServices.removeAll { entry in
+                usedServices.contains(where: { $0 == entry.service })
+            }
+        }
+
+        // Strategy 2: IORegistry property matching for whatever the EDID pass left over.
+        var stillUnmatched: [(service: IOAVServiceRef, ioEntry: io_service_t)] = []
+        for entry in unmatchedServices {
             guard let matched = matchAVServiceToDisplay(
                 ioEntry: entry.ioEntry,
-                candidates: externalIDs,
+                candidates: externalIDs.filter { result[$0] == nil },
                 alreadyMapped: Set(result.keys)
             ) else {
-                unmatchedServices.append(entry)
+                stillUnmatched.append(entry)
                 continue
             }
             result[matched] = entry.service
@@ -98,12 +167,13 @@ final class DDCService: ObservableObject, @unchecked Sendable {
             print("[DDCService] ARM64: IORegistry matched AVService to display \(matched) (vendor/product)")
             #endif
         }
+        unmatchedServices = stillUnmatched
 
-        // Strategy 2: Index fallback for any remaining unmatched services/displays
+        // Strategy 3: Index fallback for any remaining unmatched services/displays
         let unmappedIDs = externalIDs.filter { result[$0] == nil }.sorted()
         if !unmatchedServices.isEmpty && !unmappedIDs.isEmpty {
             if unmappedIDs.count > 1 {
-                let warning = "Multiple external displays: DDC may target wrong monitor (IORegistry matching failed)"
+                let warning = "Multiple external displays: DDC may target wrong monitor (EDID/registry matching failed)"
                 #if DEBUG
                 print("[DDCService] WARNING: \(warning)")
                 #endif
@@ -296,6 +366,76 @@ final class DDCService: ObservableObject, @unchecked Sendable {
         avServiceLock.lock()
         avServiceCache.removeValue(forKey: displayID)
         avServiceLock.unlock()
+    }
+
+    // MARK: - EDID-based AVService matching
+
+    /// Returns the EDID UUID of every online external display, keyed by display ID.
+    ///
+    /// The UUID is read from the display's framebuffer: CoreDisplay's info dictionary gives
+    /// the framebuffer's IORegistry path (`IODisplayLocation`), and the framebuffer publishes
+    /// the UUID as a property. Returns an empty dictionary when CoreDisplay is unavailable.
+    private func onlineDisplayEDIDUUIDs() -> [CGDirectDisplayID: String] {
+        var displayCount: UInt32 = 0
+        CGGetOnlineDisplayList(0, nil, &displayCount)
+        guard displayCount > 0 else { return [:] }
+
+        var displayIDs = [CGDirectDisplayID](repeating: 0, count: Int(displayCount))
+        CGGetOnlineDisplayList(displayCount, &displayIDs, &displayCount)
+
+        var result: [CGDirectDisplayID: String] = [:]
+        for displayID in displayIDs.prefix(Int(displayCount)) where CGDisplayIsBuiltin(displayID) == 0 {
+            if let uuid = framebufferEDIDUUID(for: displayID) {
+                result[displayID] = uuid
+            }
+        }
+        return result
+    }
+
+    /// The EDID UUID that IOKit reports for the framebuffer driving `displayID`, normalized
+    /// so it can be compared with `avServiceEDIDUUID(_:)`.
+    private func framebufferEDIDUUID(for displayID: CGDirectDisplayID) -> String? {
+        guard let infoDictionaryFn = coreDisplayInfoDictionary,
+              let info = infoDictionaryFn(displayID)?.takeRetainedValue() as? [String: Any],
+              let location = info["IODisplayLocation"] as? String,
+              !location.isEmpty
+        else { return nil }
+
+        let entry = IORegistryEntryFromPath(kIOMainPortDefault, location)
+        guard entry != IO_OBJECT_NULL else { return nil }
+        defer { IOObjectRelease(entry) }
+
+        let uuid = IORegistryEntryCreateCFProperty(
+            entry,
+            "EDID UUID" as CFString,
+            kCFAllocatorDefault,
+            IOOptionBits(kIORegistryIterateRecursively)
+        )?.takeRetainedValue() as? String
+
+        return uuid.map(Self.normalizedEDIDUUID)
+    }
+
+    /// The EDID UUID of the panel behind an AV service, normalized for comparison.
+    ///
+    /// IOKit formats the 16 EDID bytes at offsets 8–23 as 4-2-2-2-6 groups; stripping the
+    /// dashes from that string is exactly those bytes in hex. Building the key from the raw
+    /// bytes (not a fixed `0000-0000` middle) keeps it correct for panels whose EDID carries
+    /// a non-zero serial number in bytes 12–15.
+    private func avServiceEDIDUUID(_ service: IOAVServiceRef) -> String? {
+        guard let copyEDID = ioAVServiceCopyEDID else { return nil }
+
+        var edidOut: Unmanaged<CFData>?
+        guard copyEDID(service, &edidOut) == KERN_SUCCESS,
+              let data = edidOut?.takeRetainedValue() as Data?,
+              data.count >= 24
+        else { return nil }
+
+        let bytes = [UInt8](data)
+        return bytes[8..<24].map { String(format: "%02X", $0) }.joined()
+    }
+
+    private static func normalizedEDIDUUID(_ raw: String) -> String {
+        raw.replacingOccurrences(of: "-", with: "").uppercased()
     }
 
     /// ARM64 DDC write: send a Set VCP command via IOAVService.

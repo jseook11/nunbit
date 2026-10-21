@@ -68,3 +68,13 @@
 - **Fix**: Validate the reply frame before parsing: `reply[0] == 0x6E`, `(reply[1] & 0x7F) == 0x08`, `reply[2] == 0x02`, `reply[3] == 0x00`, `reply[4] == command`. Invalid → return nil and never store `max`. A failed read must not mark DDC unavailable: some panels accept Set VCP but not Get VCP. Fall back to an assumed 0–100 range, and decide availability from write success/failure.
 - **Lesson**: I2C transaction success ≠ valid DDC/CI reply. Always validate the frame header and length byte before trusting the payload, and never denormalize using an unvalidated max.
 - **Date**: 2026-10-21
+
+### L-046: Two identical monitors get their DDC brightness swapped
+- **Symptom**: With two identical MSI MD271UL panels connected, the menu row for the main display adjusts the other panel's brightness. Gamma/colour adjustments (written with `CGSetDisplayTransferByTable(displayID, …)`) land on the correct panel; only DDC brightness is swapped.
+- **Cause**: `DDCService.buildAVServiceMap` could not match `DCPAVServiceProxy` nodes to `CGDirectDisplayID`s. The DCPEXT ancestor chain exposes no `DisplayVendorID`/`DisplayProductID` (checked on macOS 26), and `CGDisplayIOServicePort` returns 0, so matching fell back to pairing `externalIDs.sorted()` with the AV services in IORegistry enumeration order. Both panels report the same vendor (0x3669), model (12472) and serial (0), so the two AV services are indistinguishable that way, and the index order happens to be the reverse of the display-ID order.
+- **Fix**: Match on the panel's EDID instead of vendor/model/index:
+  1. `CoreDisplay_DisplayCreateInfoDictionary(displayID)` (dlsym) → `IODisplayLocation` → `IORegistryEntryFromPath` → the framebuffer's `"EDID UUID"` property identifies the display.
+  2. `IOAVServiceCopyEDID(avService, &edid)` (dlsym, IOKit export) gives the same EDID for each AV service; strip the dashes from the framebuffer's `"EDID UUID"` and compare it with the hex of EDID bytes 8–23 (the 16-byte header region IOKit formats as 4-2-2-2-6), so both sides compare equal.
+  3. Match exact UUIDs first; keep vendor/product and index assignment only as fallbacks. Exclude virtual displays (`VirtualDisplayService.virtualVendorID`) from the candidate list so they cannot steal a physical service.
+- **Lesson**: "Identical" monitors are never identical at the EDID level — manufacture date, serial descriptor and checksum differ per unit. Commodity identifiers (`CGDisplayVendorNumber`/`ModelNumber`/`SerialNumber`) are not a display identity; EDID is. `CGDisplayIOServicePort` is gone on macOS 26, so `CoreDisplay_DisplayCreateInfoDictionary` + `IODisplayLocation` is the remaining bridge from display ID to framebuffer.
+- **Date**: 2026-10-21
