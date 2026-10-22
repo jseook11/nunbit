@@ -78,3 +78,10 @@
   3. Match exact UUIDs first; keep vendor/product and index assignment only as fallbacks. Exclude virtual displays (`VirtualDisplayService.virtualVendorID`) from the candidate list so they cannot steal a physical service.
 - **Lesson**: "Identical" monitors are never identical at the EDID level — manufacture date, serial descriptor and checksum differ per unit. Commodity identifiers (`CGDisplayVendorNumber`/`ModelNumber`/`SerialNumber`) are not a display identity; EDID is. `CGDisplayIOServicePort` is gone on macOS 26, so `CoreDisplay_DisplayCreateInfoDictionary` + `IODisplayLocation` is the remaining bridge from display ID to framebuffer.
 - **Date**: 2026-10-21
+
+### L-048: Retrying a failed Get VCP on every poll occupies the DDC queue
+- **Symptom**: With the combined brightness panel open, a monitor that accepts Set VCP but never answers Get VCP kept the DDC queue busy; each 1 s poll retried three I2C reads (~250 ms).
+- **Cause**: `vcpCache` only stores successful reads, so a failed read was retried on the next poll. The write-health backoff (`ddcReprobeInterval`) did not apply because read failures are deliberately not treated as "DDC unavailable" (L-033).
+- **Fix**: `DDCService.readAsync` records failures in `failedReads` and serves `nil` from that negative cache for 20 s; a successful write clears the entry so a recovered panel is read immediately.
+- **Lesson**: A cache that only remembers success turns a slow/failing device into a permanent polling load. Cache the negative result separately and back off on the same timescale as the write health check.
+- **Date**: 2026-10-22

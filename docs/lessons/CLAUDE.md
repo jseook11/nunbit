@@ -1,12 +1,12 @@
 # Lessons Learned Index — Nunbit
 
-> Updated: 2026-10-21
+> Updated: 2026-10-22
 
 ## Topic Index
 
 | Topic | File | Entries |
 |------|------|------|
-| IOKit / DDC / Rotation / Built-in Brightness / Display Matching / Apple Silicon | [iokit.md](iokit.md) | L-003 ~ L-005, L-033, L-039, L-046 + general entries |
+| IOKit / DDC / Rotation / Built-in Brightness / Display Matching / DDC Negative Cache / Apple Silicon | [iokit.md](iokit.md) | L-003 ~ L-005, L-033, L-039, L-046, L-048 + general entries |
 | CoreGraphics / HiDPI / CGVirtualDisplay / ColorSync | [coregraphics.md](coregraphics.md) | L-006, L-007, L-020 ~ L-031, L-034, L-036, L-037, L-042, L-043 + general entries |
 | SwiftUI / MenuBarExtra / UI Animation / DDC Cache / Performance | [swiftui.md](swiftui.md) | L-040, L-041, L-044, L-045, L-047 + general entries |
 | Cross-Service Collaboration / Concurrency / Resource Management | [services.md](services.md) | L-008 ~ L-019, L-032, L-035, L-038 |

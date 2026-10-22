@@ -2,6 +2,13 @@ import AppKit
 import Foundation
 import CoreGraphics
 
+extension Notification.Name {
+    /// Posted after `displays` and `DisplayManagerAccessor.shared.displays` have been
+    /// replaced. Services that outlive the menu content (Auto Brightness) use this instead
+    /// of racing the AppKit screen notification, whose ordering is not guaranteed.
+    static let nunbitDisplaysDidChange = Notification.Name("NunbitDisplaysDidChange")
+}
+
 // Global C-compatible callback for display reconfiguration.
 // Must be a top-level function (not a closure) to be used as a C function pointer.
 private func displayReconfigCallback(
@@ -249,6 +256,9 @@ class DisplayManager: ObservableObject {
             display.bounds = CGDisplayBounds(display.displayID)
             display.isMain = CGDisplayIsMain(display.displayID) != 0
         }
+
+        // Consumers such as Auto Brightness need the display set, not the async mode load.
+        NotificationCenter.default.post(name: .nunbitDisplaysDidChange, object: nil)
     }
 
     /// Auto-enables the HiDPI plist override for external 2K+ displays that don't have it yet.
