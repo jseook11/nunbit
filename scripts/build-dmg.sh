@@ -1,11 +1,20 @@
 #!/bin/bash
 set -euo pipefail
 
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+
+command -v xcodegen >/dev/null \
+  || { echo "ERROR: xcodegen is required (brew install xcodegen)"; exit 1; }
+
 # Configuration
 APP_NAME="Nunbit"
 SCHEME="Nunbit"
 BUILD_DIR="$(pwd)/build"
 DMG_NAME="${APP_NAME}.dmg"
+
+echo "=== Generating Xcode project ==="
+xcodegen generate
 
 echo "=== Building ${APP_NAME} Release ==="
 

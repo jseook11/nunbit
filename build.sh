@@ -12,6 +12,12 @@ APP_EXPORT_DIR="$BUILD_DIR/export"
 APP_PATH="$APP_EXPORT_DIR/Nunbit.app"
 DMG_PATH="$BUILD_DIR/Nunbit.dmg"
 
+command -v xcodegen >/dev/null \
+    || { echo "ERROR: xcodegen is required (brew install xcodegen)"; exit 1; }
+
+echo "==> Generating Xcode project…"
+(cd "$PROJECT_ROOT" && xcodegen generate)
+
 echo "==> Cleaning build dir…"
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
