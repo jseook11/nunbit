@@ -65,7 +65,7 @@ Tech stack: Swift 6 + SwiftUI (MenuBarExtra) + IOKit + CoreGraphics, zero third-
 
 > **Display configuration changes (mandatory):**
 - Adding **or** removing any display resets the gamma transfer table of **every** display — including a `CGVirtualDisplay` appearing/disappearing, and including displays that did not change
-- Recovery is owned by `DisplayManager.scheduleDisplayStateRestore()` → re-applies software brightness (first) and the gamma adjustment for all online displays, on two passes (0.15 s and 1.2 s — an early write can land while WindowServer is still committing and be discarded)
+- Recovery is owned by `DisplayManager.scheduleDisplayStateRestore()` → re-applies software brightness (first) and the gamma adjustment for all online displays, on three passes (0.05 s, 0.25 s and 1.2 s — an early write can land while WindowServer is still committing and be discarded)
 - Triggered from both the `CGDisplayRegisterReconfigurationCallback` and `NSApplication.didChangeScreenParametersNotification` handlers
 - ❌ Do not restore display state from a SwiftUI `.onAppear` — that hides the bug until the user opens the right panel
 
