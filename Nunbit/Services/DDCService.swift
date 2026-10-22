@@ -66,6 +66,26 @@ final class DDCService: ObservableObject, @unchecked Sendable {
     private var vcpCache: [CGDirectDisplayID: [UInt8: VCPCacheEntry]] = [:]
     private let cacheLock = NSLock()
 
+    // MARK: - Failed Read Backoff
+
+    /// How long a failed Get VCP read suppresses further attempts for that display/code.
+    ///
+    /// Some panels accept Set VCP (brightness writes work) but never answer Get VCP. Without
+    /// this negative cache every poll retried the I2C bus three times — while the combined
+    /// brightness panel is open that meant ~250 ms of DDC-queue time per second per display.
+    /// Matches `BrightnessService.ddcReprobeInterval`, so a returning monitor is re-probed
+    /// at the same cadence as a software-only one.
+    private static let failedReadTTL: TimeInterval = 20.0
+
+    private struct FailedReadEntry {
+        let timestamp: Date
+        var isExpired: Bool { Date().timeIntervalSince(timestamp) > DDCService.failedReadTTL }
+    }
+
+    /// Failures are kept separately from `vcpCache` because a failed read has no
+    /// `(current, max)` pair to serve; it only says "do not ask again yet".
+    private var failedReads: [CGDirectDisplayID: [UInt8: FailedReadEntry]] = [:]
+
     // MARK: - IOAVService Cache (ARM64 only)
 
 #if arch(arm64)
@@ -768,6 +788,7 @@ final class DDCService: ObservableObject, @unchecked Sendable {
     func clearCache(for displayID: CGDirectDisplayID) {
         cacheLock.lock()
         vcpCache.removeValue(forKey: displayID)
+        failedReads.removeValue(forKey: displayID)
         cacheLock.unlock()
 #if arch(arm64)
         invalidateAVServiceCache(for: displayID)
@@ -792,9 +813,12 @@ final class DDCService: ObservableObject, @unchecked Sendable {
         ddcQueue.async {
             for attempt in 0..<3 {
                 if self.writeSynchronous(displayID: displayID, command: command, value: value) {
-                    // Invalidate cached value so next read reflects the new setting.
+                    // Invalidate cached value so next read reflects the new setting. A
+                    // successful write also proves the channel is alive, so let the next
+                    // read try again instead of waiting out the failure backoff.
                     self.cacheLock.lock()
                     self.vcpCache[displayID]?[command] = nil
+                    self.failedReads[displayID]?[command] = nil
                     self.cacheLock.unlock()
                     if let completion {
                         Task { @MainActor in completion(true) }
@@ -827,6 +851,15 @@ final class DDCService: ObservableObject, @unchecked Sendable {
             Task { @MainActor in completion(result) }
             return
         }
+
+        // Negative cache: a recent failure means the panel is not answering reads. Do not
+        // retry the bus on every poll; report nil until the backoff expires or a write
+        // succeeds (which clears the entry).
+        if let failed = failedReads[displayID]?[command], !failed.isExpired {
+            cacheLock.unlock()
+            Task { @MainActor in completion(nil) }
+            return
+        }
         cacheLock.unlock()
 
         ddcQueue.async {
@@ -837,12 +870,23 @@ final class DDCService: ObservableObject, @unchecked Sendable {
                     self.vcpCache[displayID]![command] = VCPCacheEntry(
                         current: r.current, max: r.max, timestamp: Date()
                     )
+                    self.failedReads[displayID]?[command] = nil
                     self.cacheLock.unlock()
                     Task { @MainActor in completion(r) }
                     return
                 }
                 if attempt < 2 { Thread.sleep(forTimeInterval: 0.05) }
             }
+            // Remember the failure so the next poll is served from the negative cache
+            // instead of spending another ~250 ms on the I2C bus.
+            self.cacheLock.lock()
+            if self.failedReads[displayID] == nil { self.failedReads[displayID] = [:] }
+            self.failedReads[displayID]![command] = FailedReadEntry(timestamp: Date())
+            self.cacheLock.unlock()
+            #if DEBUG
+            NSLog("[DDCService] Get VCP 0x%@ failed for display %u; reads paused for %ds",
+                  String(command, radix: 16), displayID, Int(Self.failedReadTTL))
+            #endif
             Task { @MainActor in completion(nil) }
         }
     }

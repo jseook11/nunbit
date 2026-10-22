@@ -10,9 +10,12 @@ All notable changes to Nunbit are documented here.
 - Renamed the project from FreeDisplay to Nunbit. The bundle identifier is now `com.jseook11.nunbit`, so preferences are reset once on first launch.
 - DDC brightness validates Get VCP replies and assumes a 0–100 range when a panel cannot answer reads, fixing sliders that moved without changing the panel.
 - Auto Brightness can now be switched off when no built-in display is present.
+- Auto Brightness stops its 2-second poll when there is no active built-in source or no physical external display, and resumes when a display is connected or the Mac wakes. The panel's external-display count is now also correct while the toggle is off.
 
 ### Fixed
 - A Swift 6 main-actor violation that killed the app when dragging the brightness slider for an external display.
+- Failed DDC Get VCP reads are negative-cached for 20 seconds. A monitor that accepts writes but never answers reads no longer costs up to ~250 ms of I2C-queue time per second per display while the brightness panel is open; a successful write clears the backoff so the next read is attempted immediately.
+- The brightness panels now stop their follow-up polls on `onDisappear` as well as on task cancellation, so a MenuBarExtra content view that is retained after the panel closes cannot keep polling.
 - Combined brightness now follows brightness changed elsewhere (individual sliders, System Settings, native keys, monitor buttons) instead of freezing at its first value, and it is hidden when only one physical display is connected.
 - Virtual displays no longer show a brightness slider, receive brightness refreshes, or participate in Auto Brightness sync.
 - The Color Profile row now shows the real active profile (e.g. "Color LCD") instead of "Unknown", and the active profile is highlighted again. macOS 26 returns `DeviceProfileURL` as an `NSURL`, which the old string-only lookup silently dropped.

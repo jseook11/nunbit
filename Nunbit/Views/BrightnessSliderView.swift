@@ -10,6 +10,10 @@ struct BrightnessSliderView: View {
     @State private var ddcStatus: Bool? = nil  // nil=unknown, true=DDC, false=Software
     /// Throttle DDC writes during drag to ~100ms intervals.
     @State private var lastDDCWrite: Date = .distantPast
+    /// The `.task` is cancelled when the view disappears, but this flag also stops the
+    /// polling loop if the MenuBarExtra window is merely ordered out and its content is
+    /// retained. Either signal is enough.
+    @State private var isPanelVisible: Bool = true
 
     init(display: DisplayInfo) {
         self.display = display
@@ -124,6 +128,7 @@ struct BrightnessSliderView: View {
             .padding(.vertical, 4)
         }
         .task(id: display.displayID) {
+            isPanelVisible = true
             // The cached value is only refreshed on display-configuration changes, so a
             // brightness set from System Settings, the native brightness keys or the
             // ambient-light sensor would otherwise show up as a stale slider.
@@ -134,14 +139,28 @@ struct BrightnessSliderView: View {
             updateDDCStatus()
 
             // Keep following external changes while the panel is visible. The task is
-            // cancelled when MenuBarExtra tears this content down, so this costs nothing
-            // while the menu is closed. DisplayServices reads are microsecond-level.
+            // cancelled when MenuBarExtra tears this content down; `isPanelVisible` is a
+            // second gate for the case where the window is ordered out but retained.
+            // DisplayServices reads are microsecond-level.
             guard display.isBuiltin else { return }
-            while !Task.isCancelled {
+            #if DEBUG
+            NSLog("[BrightnessSliderView] polling built-in brightness for display %u", display.displayID)
+            #endif
+            while !Task.isCancelled && isPanelVisible {
                 try? await Task.sleep(nanoseconds: 500_000_000)
-                guard !Task.isCancelled, !isDragging else { continue }
+                guard !Task.isCancelled, isPanelVisible, !isDragging else { continue }
                 await BrightnessService.shared.refreshBrightness(for: display)
             }
+            #if DEBUG
+            NSLog("[BrightnessSliderView] stopped polling display %u (cancelled=%d, visible=%d)",
+                  display.displayID, Task.isCancelled ? 1 : 0, isPanelVisible ? 1 : 0)
+            #endif
+        }
+        .onAppear {
+            isPanelVisible = true
+        }
+        .onDisappear {
+            isPanelVisible = false
         }
         .onChange(of: display.brightness) { _, newValue in
             if !isDragging && abs(newValue - localBrightness) >= 1 {
@@ -161,6 +180,9 @@ struct CombinedBrightnessView: View {
     @State private var isDragging: Bool = false
     /// Throttle DDC writes during drag to ~100ms intervals.
     @State private var lastDDCWrite: Date = .distantPast
+    /// See `BrightnessSliderView.isPanelVisible`: stops the 1 s poll if the menu content
+    /// outlives the visible panel.
+    @State private var isPanelVisible: Bool = true
 
     init(displays: [DisplayInfo]) {
         self.displays = displays
@@ -251,6 +273,7 @@ struct CombinedBrightnessView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .task(id: displays.map(\.displayID)) {
+            isPanelVisible = true
             // Seed from the cached values, then re-read every display: the cache is only
             // invalidated by display-configuration changes, not by a brightness change
             // made from System Settings, the native keys or the monitor's own buttons.
@@ -259,14 +282,28 @@ struct CombinedBrightnessView: View {
             combinedBrightness = averageBrightness
 
             // Follow changes while the panel is visible. The task dies with the
-            // MenuBarExtra content, so this costs nothing when the menu is closed.
-            // 1 s is enough here: DDC reads are cached for 5 s per VCP code.
-            while !Task.isCancelled {
+            // MenuBarExtra content; `isPanelVisible` also stops it if the window is
+            // ordered out but retained. 1 s is enough here: DDC reads are cached for 5 s
+            // per VCP code, and failed reads back off for 20 s (DDCService).
+            #if DEBUG
+            NSLog("[CombinedBrightnessView] polling %d display(s)", displays.count)
+            #endif
+            while !Task.isCancelled && isPanelVisible {
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
-                guard !Task.isCancelled, !isDragging else { continue }
+                guard !Task.isCancelled, isPanelVisible, !isDragging else { continue }
                 await refreshAll()
                 if !isDragging { combinedBrightness = averageBrightness }
             }
+            #if DEBUG
+            NSLog("[CombinedBrightnessView] stopped polling (cancelled=%d, visible=%d)",
+                  Task.isCancelled ? 1 : 0, isPanelVisible ? 1 : 0)
+            #endif
+        }
+        .onAppear {
+            isPanelVisible = true
+        }
+        .onDisappear {
+            isPanelVisible = false
         }
         .onReceive(Publishers.MergeMany(displays.map(\.$brightness))) { _ in
             // Follow individual sliders and polled hardware values immediately;

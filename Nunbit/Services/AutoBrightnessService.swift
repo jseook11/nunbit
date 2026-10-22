@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import IOKit
 import CoreGraphics
@@ -17,6 +18,24 @@ final class AutoBrightnessService: ObservableObject, @unchecked Sendable {
     static let shared = AutoBrightnessService()
     private init() {
         loadPrefs()
+
+        // The service lives for the whole app lifetime, so it has to notice display
+        // changes itself. The menu section is hidden when there is no source or target,
+        // and polling must stop then restart when a display is connected again.
+        displayObserver = NotificationCenter.default.addObserver(
+            forName: .nunbitDisplaysDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.reevaluatePolling() }
+        }
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.reevaluatePolling() }
+        }
     }
 
     // MARK: - State
@@ -24,7 +43,7 @@ final class AutoBrightnessService: ObservableObject, @unchecked Sendable {
     @Published var isEnabled: Bool = false {
         didSet {
             if isEnabled {
-                startPolling()
+                reevaluatePolling()
             } else {
                 stopPolling()
             }
@@ -52,7 +71,13 @@ final class AutoBrightnessService: ObservableObject, @unchecked Sendable {
     // MARK: - Private
 
     private var pollingTask: Task<Void, Never>?
+    /// Bumped whenever polling starts or stops. A loop that is winding down can then tell
+    /// whether it is still the current poller before clearing the task or restarting.
+    private var pollingGeneration: Int = 0
     private let pollingInterval: TimeInterval = 2.0  // seconds
+
+    private var displayObserver: NSObjectProtocol?
+    private var wakeObserver: NSObjectProtocol?
 
     // MARK: - Launch
 
@@ -61,13 +86,20 @@ final class AutoBrightnessService: ObservableObject, @unchecked Sendable {
     /// lazily, and relying on that section is the same failure mode as wake recovery:
     /// the feature silently did nothing after a relaunch until the panel was opened.
     func activateAtLaunch() {
-        if isEnabled { startPolling() }
         refreshBuiltinBrightnessOnce()
+        reevaluatePolling()
     }
 
     /// One-off built-in brightness read, used while polling is off (or before the first
     /// poll) so the panel can show the current value.
     func refreshBuiltinBrightnessOnce() {
+        // Keep the target count fresh even while polling is off: the panel shows it
+        // whenever the section is visible, not only after the toggle is turned on.
+        let context = pollingContext()
+        if syncTargetCount != context.targetCount {
+            syncTargetCount = context.targetCount
+        }
+
         Task.detached { [weak self] in
             guard let self else { return }
             let value = self.readBuiltinBrightness()
@@ -93,8 +125,11 @@ final class AutoBrightnessService: ObservableObject, @unchecked Sendable {
     /// Reads the current brightness of the builtin display.
     /// Returns a value in 0.0–1.0, or nil if no builtin display is found.
     /// Safe to call from a background thread.
-    nonisolated func readBuiltinBrightness() -> Double? {
-        guard let builtinID = Self.builtinDisplayID() else { return nil }
+    ///
+    /// `builtinID` is passed by the polling loop, which already resolved it on the main
+    /// actor, so each poll avoids a second pair of `CGGetActiveDisplayList` calls.
+    nonisolated func readBuiltinBrightness(builtinID: CGDirectDisplayID? = nil) -> Double? {
+        guard let builtinID = builtinID ?? Self.builtinDisplayID() else { return nil }
 
         // DisplayServices first: on macOS 26 CoreDisplay_Display_GetUserBrightness has been
         // observed returning a stale 1.0 while DisplayServices reports the real panel value.
@@ -129,21 +164,89 @@ final class AutoBrightnessService: ObservableObject, @unchecked Sendable {
 
     // MARK: - Polling
 
+    private struct PollingContext {
+        let builtinDisplayID: CGDirectDisplayID?
+        let targetCount: Int
+        var canPoll: Bool { builtinDisplayID != nil && targetCount > 0 }
+    }
+
+    /// The source is an active built-in panel (it carries the ambient-light sensor); the
+    /// targets are physical external displays. Virtual displays have no backlight.
+    @MainActor
+    private func pollingContext() -> PollingContext {
+        let displays = DisplayManagerAccessor.shared.displays
+        let builtinID = displays.first {
+            $0.isBuiltin && CGDisplayIsActive($0.displayID) != 0 && CGDisplayIsAsleep($0.displayID) == 0
+        }?.displayID
+
+        let targetCount = displays.filter {
+            !$0.isBuiltin && !VirtualDisplayService.shared.isVirtualDisplay($0.displayID)
+        }.count
+        return PollingContext(builtinDisplayID: builtinID, targetCount: targetCount)
+    }
+
+    /// Starts, keeps, or stops polling according to the current display configuration and
+    /// the enabled flag. Called at launch, on toggle, and whenever displays change.
+    func reevaluatePolling() {
+        guard isEnabled, pollingContext().canPoll else {
+            stopPolling()
+            return
+        }
+        startPolling()
+    }
+
     private func startPolling() {
-        stopPolling()
+        // Idempotent: a display notification must not create a second loop.
+        guard pollingTask == nil else { return }
+
+        // Evaluate every target on the first pass. The loop may have been stopped while no
+        // external display was connected, so the last applied value says nothing about a
+        // display that has just appeared.
+        lastAppliedBrightness = -1
+
+        pollingGeneration += 1
+        let generation = pollingGeneration
+        let interval = pollingInterval
+        #if DEBUG
+        NSLog("[AutoBrightness] polling started")
+        #endif
+
         pollingTask = Task.detached { [weak self] in
             guard let self else { return }
             while !Task.isCancelled {
-                let brightness = self.readBuiltinBrightness()
+                // Re-check every iteration: a display can disappear without a notification
+                // reaching us in time, and there is no point reading the panel then.
+                let context = await MainActor.run(body: { self.pollingContext() })
+                guard context.canPoll, let builtinID = context.builtinDisplayID else { break }
+
+                let brightness = self.readBuiltinBrightness(builtinID: builtinID)
                 await self.applyBrightness(builtin: brightness)
-                try? await Task.sleep(nanoseconds: UInt64(self.pollingInterval * 1_000_000_000))
+
+                try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
             }
+            await MainActor.run { self.finishPolling(generation: generation) }
         }
     }
 
+    @MainActor
+    private func finishPolling(generation: Int) {
+        // A newer start/stop already owns polling; do not clobber it.
+        guard pollingGeneration == generation else { return }
+        pollingTask = nil
+        // A target may have appeared while this loop was winding down.
+        reevaluatePolling()
+    }
+
     private func stopPolling() {
+        // Repeated display notifications call this while polling is already stopped;
+        // do not bump the generation for a loop that does not exist.
+        guard pollingTask != nil else { return }
+        pollingGeneration += 1
         pollingTask?.cancel()
         pollingTask = nil
+        #if DEBUG
+        NSLog("[AutoBrightness] polling stopped")
+        #endif
     }
 
     @MainActor

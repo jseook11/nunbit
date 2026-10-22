@@ -80,6 +80,7 @@ Tech stack: Swift 6 + SwiftUI (MenuBarExtra) + IOKit + CoreGraphics, zero third-
 - ❌ Never pair a `DCPAVServiceProxy` (IOAVService) to a display by vendor/model or by enumeration index — the DCPEXT ancestor chain exposes no vendor/product, and two identical panels then get each other's DDC controls
 - ✅ Match the AV service by EDID: `CoreDisplay_DisplayCreateInfoDictionary(displayID)` → `IODisplayLocation` → framebuffer `"EDID UUID"`, compared with `IOAVServiceCopyEDID` (see L-046)
 - DDC external brightness control is not always available → the UI must degrade gracefully (notify the user when detection fails)
+- Failed Get VCP reads are negative-cached for 20 s (`DDCService.failedReadTTL`); ❌ do not remove it — a monitor that accepts writes but never answers reads would otherwise retry the I2C bus three times on every poll
 
 > **Async principles:**
 - Only make genuinely slow operations async (filesystem scans, network requests)
@@ -114,6 +115,7 @@ Tech stack: Swift 6 + SwiftUI (MenuBarExtra) + IOKit + CoreGraphics, zero third-
 - It mirrors the built-in panel's *brightness value* to physical external displays; macOS's own auto-brightness already shows up in that value, so the system setting never needs to be read (there is no reliable API for it — L-045)
 - ❌ Never leave the service to be created by `MenuBarExtra` content: a persisted "on" must be activated at launch from `AppDelegate` (`AutoBrightnessService.shared.activateAtLaunch()`), otherwise it does nothing after a relaunch until that panel is opened (L-045)
 - Virtual displays are never sync targets (no backlight)
+- ❌ Do not leave the 2 s poll running with nothing to do: it must stop when there is no active built-in source or no physical external target, and restart from `.nunbitDisplaysDidChange` (posted by `DisplayManager.refreshDisplays`) or wake
 - The section is shown only when it has both a source and a target: an **active built-in display** (the ALS panel; every Mac with one has an ambient-light sensor, and there is no supported API to query the sensor itself) **and** a physical external display. Mac mini / clamshell → hidden
 
 > **Stop and ask the user:**
